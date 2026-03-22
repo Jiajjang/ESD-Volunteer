@@ -2,9 +2,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from flask import Flask, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from datetime import datetime
+from supabase import create_client
 import os, json, threading, pika, logging
 
 app = Flask(__name__)
@@ -13,10 +12,11 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── Database ──────────────────────────────────────────────────────────────────
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///waitlist.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
+# ── Supabase ──────────────────────────────────────────────────────────────────
+supabase = create_client(
+    os.environ.get('SUPABASE_URL'),
+    os.environ.get('SUPABASE_KEY')
+)
 
 # ── RabbitMQ config ───────────────────────────────────────────────────────────
 RABBITMQ_HOST   = os.environ.get('RABBITMQ_HOST', 'localhost')
@@ -25,33 +25,6 @@ RABBITMQ_USER   = os.environ.get('RABBITMQ_USER', 'guest')
 RABBITMQ_PASS   = os.environ.get('RABBITMQ_PASS', 'guest')
 RABBITMQ_VHOST  = os.environ.get('RABBITMQ_VHOST', '/')
 FANOUT_EXCHANGE = os.environ.get('FANOUT_EXCHANGE', 'G2T7_fanout.exchange')
-
-# ── Model ─────────────────────────────────────────────────────────────────────
-# 4 columns only, no status.
-# Status (pending/confirmed/rejected/cancelled) lives in Registration Service.
-# Waitlist only tracks who is in the queue and in what order.
-class WaitlistEntry(db.Model):
-    __tablename__ = 'waitlist'
-
-    waitlist_id  = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    volunteer_id = db.Column(db.Integer, nullable=False)
-    event_id     = db.Column(db.Integer, nullable=False, index=True)
-    joined_at    = db.Column(db.DateTime, default=datetime.now, nullable=False)
-
-    __table_args__ = (
-        db.UniqueConstraint('event_id', 'volunteer_id', name='uq_event_volunteer'),
-    )
-
-    def to_dict(self):
-        return {
-            'waitlist_id':  self.waitlist_id,
-            'volunteer_id': self.volunteer_id,
-            'event_id':     self.event_id,
-            'joined_at':    self.joined_at.isoformat() if self.joined_at else None,
-        }
-
-with app.app_context():
-    db.create_all()
 
 # ── RabbitMQ helper ───────────────────────────────────────────────────────────
 def get_rabbitmq_connection():
@@ -66,7 +39,7 @@ def get_rabbitmq_connection():
 
 
 # ── POST /waitlist/<event_id> ─────────────────────────────────────────────────
-# SCENARIO 1 — Called by Register for Event composite service when event is full.
+# SCENARIO 1 — Called by Register for Event composite when event is full.
 # Adds volunteer to the back of the queue.
 # ─────────────────────────────────────────────────────────────────────────────
 @app.route('/waitlist/<int:event_id>', methods=['POST'])
@@ -77,29 +50,39 @@ def add_to_waitlist(event_id):
     """
     data = request.get_json()
     if not data or not data.get('volunteer_id'):
-        return jsonify({'error': 'volunteer_id is required'}), 400
+        return jsonify({'code': 400, 'message': 'volunteer_id is required'}), 400
 
     volunteer_id = data['volunteer_id']
 
-    existing = WaitlistEntry.query.filter_by(event_id=event_id, volunteer_id=volunteer_id).first()
-    if existing:
+    # Check for duplicate
+    existing = supabase.table('waitlist') \
+        .select('*') \
+        .eq('event_id', event_id) \
+        .eq('volunteer_id', volunteer_id) \
+        .execute()
+
+    if existing.data:
         return jsonify({
-            'error': 'Volunteer is already in the waitlist queue for this event',
-            'waitlist': existing.to_dict()
+            'code': 409,
+            'message': 'Volunteer is already in the waitlist queue for this event',
+            'data': existing.data[0]
         }), 409
 
-    entry = WaitlistEntry(volunteer_id=volunteer_id, event_id=event_id, joined_at=datetime.now())
-    db.session.add(entry)
-    db.session.commit()
+    # Insert new entry — joined_at defaults to now() in Supabase
+    response = supabase.table('waitlist') \
+        .insert({'event_id': event_id, 'volunteer_id': volunteer_id}) \
+        .execute()
 
-    logger.info(f'[Waitlist] Added volunteer_id={volunteer_id} to queue for event_id={event_id}')
-    return jsonify({'message': 'Volunteer added to waitlist', 'waitlist': entry.to_dict()}), 201
+    if response.data:
+        logger.info(f'[Waitlist] Added volunteer_id={volunteer_id} to queue for event_id={event_id}')
+        return jsonify({'code': 201, 'data': response.data[0]}), 201
+
+    return jsonify({'code': 500, 'message': 'Error adding to waitlist'}), 500
 
 
 # ── GET /waitlist/<event_id>/next ─────────────────────────────────────────────
-# SCENARIO 2 — Called by Cancel Registration composite service when a slot opens.
-# Returns the first person in the queue (oldest joined_at) AND removes them
-# from the queue atomically. Cancel Registration service then handles promotion.
+# SCENARIO 2 — Called by Cancel Registration composite when a slot opens.
+# Returns AND removes the first person in the queue (oldest joined_at).
 # ─────────────────────────────────────────────────────────────────────────────
 @app.route('/waitlist/<int:event_id>/next', methods=['GET'])
 def get_next_volunteer(event_id):
@@ -107,23 +90,29 @@ def get_next_volunteer(event_id):
     Returns: { waitlist_id, volunteer_id, event_id, joined_at }
          or: { volunteer_id: null } if queue is empty
     """
-    entry = (
-        WaitlistEntry.query
-        .filter_by(event_id=event_id)
-        .order_by(WaitlistEntry.joined_at.asc())
-        .first()
-    )
+    # Get the oldest entry (first in queue)
+    response = supabase.table('waitlist') \
+        .select('*') \
+        .eq('event_id', event_id) \
+        .order('joined_at', desc=False) \
+        .limit(1) \
+        .execute()
 
-    if not entry:
+    if not response.data:
         logger.info(f'[Waitlist] Queue is empty for event_id={event_id}')
-        return jsonify({'volunteer_id': None}), 200
+        return jsonify({'code': 200, 'volunteer_id': None}), 200
 
-    result = entry.to_dict()          # capture before deleting
-    db.session.delete(entry)
-    db.session.commit()
+    entry       = response.data[0]
+    waitlist_id = entry['waitlist_id']
 
-    logger.info(f'[Waitlist] Popped volunteer_id={result["volunteer_id"]} from queue for event_id={event_id}')
-    return jsonify(result), 200
+    # Delete the row
+    supabase.table('waitlist') \
+        .delete() \
+        .eq('waitlist_id', waitlist_id) \
+        .execute()
+
+    logger.info(f'[Waitlist] Popped volunteer_id={entry["volunteer_id"]} from queue for event_id={event_id}')
+    return jsonify({'code': 200, 'data': entry}), 200
 
 
 # ── GET /waitlist/<event_id> ──────────────────────────────────────────────────
@@ -131,29 +120,29 @@ def get_next_volunteer(event_id):
 # ─────────────────────────────────────────────────────────────────────────────
 @app.route('/waitlist/<int:event_id>', methods=['GET'])
 def get_waitlist(event_id):
-    entries = (
-        WaitlistEntry.query
-        .filter_by(event_id=event_id)
-        .order_by(WaitlistEntry.joined_at.asc())
-        .all()
-    )
+    response = supabase.table('waitlist') \
+        .select('*') \
+        .eq('event_id', event_id) \
+        .order('joined_at', desc=False) \
+        .execute()
+
     return jsonify({
+        'code':     200,
         'event_id': event_id,
-        'count':    len(entries),
-        'waitlist': [e.to_dict() for e in entries]
+        'count':    len(response.data),
+        'data':     response.data
     }), 200
 
 
 # ── GET /health ───────────────────────────────────────────────────────────────
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'healthy', 'service': 'waitlist-service'}), 200
+    return jsonify({'code': 200, 'status': 'healthy', 'service': 'waitlist-service'}), 200
 
 
 # ── AMQP Fanout Consumer — SCENARIO 3 ────────────────────────────────────────
-# Event Service publishes to G2T7_fanout.exchange when organiser cancels event.
-# Waitlist Service receives this and deletes ALL queue entries for that event.
-# Pure choreography — no HTTP call needed, no orchestrator involved.
+# Listens on G2T7_fanout.exchange. When Event Service cancels an event,
+# deletes ALL waitlist entries for that event.
 # ─────────────────────────────────────────────────────────────────────────────
 def handle_event_cancelled(ch, method, properties, body):
     try:
@@ -167,11 +156,12 @@ def handle_event_cancelled(ch, method, properties, body):
 
         logger.info(f'[AMQP] Received event.cancelled for event_id={event_id}')
 
-        with app.app_context():
-            deleted = WaitlistEntry.query.filter_by(event_id=event_id).delete()
-            db.session.commit()
+        response = supabase.table('waitlist') \
+            .delete() \
+            .eq('event_id', event_id) \
+            .execute()
 
-        logger.info(f'[AMQP] Cleared {deleted} queue entries for event_id={event_id}')
+        logger.info(f'[AMQP] Cleared waitlist for event_id={event_id}')
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
     except Exception as e:
