@@ -203,4 +203,4 @@ def start_amqp_consumer():
 
 if __name__ == '__main__':
     threading.Thread(target=start_amqp_consumer, daemon=True).start()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5003)), debug=False)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5003)), debug=True)
