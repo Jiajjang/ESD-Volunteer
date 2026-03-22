@@ -55,6 +55,12 @@ def update_capacity(event_id):
 #using HTTP DELETE
 @app.route("/event/<int:event_id>", methods=['DELETE'])
 def delete_event(event_id):
+    #Get the reason from the request body (JSON)
+    data = request.get_json()
+    #Provide a default message if no reason is provided
+    cancellation_reason = data.get('reason', 'No reason provided')
+
+    #Find the event in the database
     event = Event.query.get(event_id)
     
     if not event:
@@ -63,13 +69,19 @@ def delete_event(event_id):
             "message": "Event not found"
         }), 404
 
+    #Update the status and the reason column
     event.status = 'DELETED'
+    event.reason = cancellation_reason
+    
+    #Save changes to Supabase
     db.session.commit()
 
+    #Return the updated info including the reason
     return jsonify({
         "code": 200,
         "eventID": event.event_id,
-        "status": "DELETED"
+        "status": "DELETED",
+        "reason": event.reason
     }), 200
 
 
