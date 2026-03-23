@@ -1,106 +1,145 @@
 import os
+import json
+import pika
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from event import db, Event
+from supabase import create_client
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
-
 CORS(app)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# --- Supabase ---
+supabase = create_client(os.environ.get('SUPABASE_URL'), os.environ.get('SUPABASE_KEY'))
 
-db.init_app(app)
+# --- RabbitMQ Config ---
+RABBITMQ_HOST = os.environ.get('RABBITMQ_HOST', 'localhost')
+RABBITMQ_PORT = int(os.environ.get('RABBITMQ_PORT', 5672))
+RABBITMQ_USER = os.environ.get('RABBITMQ_USER', 'guest')
+RABBITMQ_PASS = os.environ.get('RABBITMQ_PASS', 'guest')
+FANOUT_EXCHANGE = os.environ.get('FANOUT_EXCHANGE', 'G2T7_fanout.exchange')
 
-#Scenrio 1 & 2: update the capacity 
-#using HTTP PUT
+#Helper function for RabbitMQ --------------------
+def publish_event_cancelled(event_id):
+    try:
+        credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
+        parameters = pika.ConnectionParameters(host=RABBITMQ_HOST, port=RABBITMQ_PORT, credentials=credentials)
+        connection = pika.BlockingConnection(parameters)
+        channel = connection.channel()
+
+        #declare the exchange, ensure it matches the Waitlist service
+        channel.exchange_declare(exchange=FANOUT_EXCHANGE, exchange_type='fanout', durable=True)
+
+        #create the message
+        message = json.dumps({"event_id": event_id, "status": "cancelled"})
+
+        #publish
+        channel.basic_publish(exchange=FANOUT_EXCHANGE, routing_key='', body=message)
+        connection.close()
+        print(f" [AMQP] Sent Event Cancellation for ID: {event_id}")
+    except Exception as e:
+        print(f" [AMQP] Error publishing message: {e}")
+
+# ------
+
+#Get All Events
+@app.route("/event", methods=['GET'])
+def get_all():
+    try:
+        response = supabase.table('event').select('*').execute()
+        if response.data:
+            return jsonify({
+                "code": 200, 
+                "data": response.data})
+        return jsonify({
+            "code": 404, 
+            "message": "No events found"
+        }), 404
+    except Exception as e:
+        return jsonify({
+            "code": 500, 
+            "message": str(e)
+        }), 500
+
+#Scenario 1 and 2 Update Capacity
 @app.route("/event/<int:event_id>/capacity", methods=['PUT'])
 def update_capacity(event_id):
-    data = request.get_json()
-    action = data.get('action') #whether increment or decrement
+    try:
+        data = request.get_json()
+        action = data.get('action')
 
-    #select event by id
-    event = Event.query.get(event_id)
-
-    if not event:
-        return jsonify({
-            "code": 404, 
-            "message": "Event not found"
-        }), 404
-    
-    if action == 'increment':
-        if event.current_capacity < event.max_capacity:
-            event.current_capacity +=1
-        else:
+        # Get current state
+        res = supabase.table('event').select('current_capacity, max_capacity').eq('event_id', event_id).execute()
+        if not res.data:
             return jsonify({
-                "code": 400, 
-                "message": "Event is full"
-            }), 400
+                "code": 404, 
+                "message": "Event not found"
+            }), 404
         
-    elif action == 'decrement':
-        if event.current_capacity >0:
-            event.current_capacity -=1
+        event = res.data[0]
+        curr = event['current_capacity']
+        mx = event['max_capacity']
 
-    db.session.commit()
-    return jsonify({
-        "code": 200, 
-        "eventID": event.event_id, 
-        "capacity": event.current_capacity
-    }), 200
+        # the action has to be declared inorder to update the capacity (increment/decrement)
+        if action == 'increment':
+            if curr < mx:
+                curr += 1
+            else:
+                return jsonify({
+                    "code": 400, 
+                    "message": "Event is full"
+                }), 400
+        elif action == 'decrement':
+            if curr > 0:
+                curr -= 1
 
-#Scenario 3: organiser cancel event
-#using HTTP DELETE
-@app.route("/event/<int:event_id>", methods=['DELETE'])
-def delete_event(event_id):
-    #Get the reason from the request body (JSON)
-    data = request.get_json()
-    #Provide a default message if no reason is provided
-    cancellation_reason = data.get('reason', 'No reason provided')
-
-    #Find the event in the database
-    event = Event.query.get(event_id)
-    
-    if not event:
-        return jsonify({
-            "code": 404, 
-            "message": "Event not found"
-        }), 404
-
-    #Update the status and the reason column
-    event.status = 'DELETED'
-    event.reason = cancellation_reason
-    
-    #Save changes to Supabase
-    db.session.commit()
-
-    #Return the updated info including the reason
-    return jsonify({
-        "code": 200,
-        "eventID": event.event_id,
-        "status": "DELETED",
-        "reason": event.reason
-    }), 200
-
-
-#if want to get all the events
-@app.route("/event")
-def get_all():
-    event_list = Event.query.all()
-    #if there are any events in the list then return with code 200, or else return not found with code 404
-    if len(event_list):
+        # Update Supabase
+        update_res = supabase.table('event').update({"current_capacity": curr}).eq('event_id', event_id).execute()
         return jsonify({
             "code": 200, 
-            "data": [e.json() for e in event_list]
+            "eventID": event_id, 
+            "capacity": curr})
+    except Exception as e:
+        return jsonify({
+            "code": 500, 
+            "message": str(e)
+        }), 500
+    
+
+#Scenario 3 Cancel Event (RabbitMQ Fanout)
+@app.route("/event/<int:event_id>", methods=['DELETE'])
+def delete_event(event_id):
+    try:
+        data = request.get_json() or {}
+        reason = data.get('reason', 'No reason provided')
+
+        # Update Supabase Status
+        response = supabase.table('event').update({
+            "status": "cancelled",
+            "reason": reason
+        }).eq('event_id', event_id).execute()
+
+        if not response.data:
+            return jsonify({
+                "code": 404, 
+                "message": "Event not found"
+            }), 404
+
+        # Publish to RabbitMQ (The Fanout Exchange)
+        publish_event_cancelled(event_id)
+
+        return jsonify({
+            "code": 200,
+            "eventID": event_id,
+            "status": "cancelled",
+            "reason": reason
         })
-    return jsonify({
-        "code": 404, 
-        "message": "No events found"
-    }), 404
-
-
+    except Exception as e:
+        return jsonify({"code": 500, "message": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(port=5001, debug=True) 
+    app.run(host='0.0.0.0', port=5001, debug=True)
+
+
