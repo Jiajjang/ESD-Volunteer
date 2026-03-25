@@ -39,8 +39,33 @@ services:
   organiser:
     build: ./organiser
     ports:
-      "5004:5004"
+      - "5004:5004"
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
+    restart: always
+
+  register_for_event:
+    build: ./register_for_event
+    ports:
+      - "5010:5010"
+    environment:
+      - EVENT_URL=http://event:5002
+      - VOLUNTEER_URL=http://volunteer:5003
+      - REGISTRATION_URL=http://registration:5001
+      - WAITLIST_URL=http://waitlist:5004
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - event
+      - volunteer
+      - registration
+      - waitlist
+      - rabbitmq
+    restart: always
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI → localhost:15672
     restart: always
