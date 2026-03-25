@@ -33,34 +33,22 @@ const event = computed(() => events.value.find(e => e.id == eventId))
 </script>
 
 <template>
-  <main class="pt-20 p-8 max-w-4xl mx-auto">
-    <button class="btn btn-ghost mb-8" @click="$router.back()">
-      ← Back to Events
-    </button>
-    <div v-if="event" class="card bg-base-100 shadow-2xl">
-      <figure class="px-10 pt-10">
-        <img :src="event.photo" alt="Event" class="rounded-xl" />
-      </figure>
-      <div class="card-body items-center text-center">
-        <h1 class="card-title text-4xl">{{ event.title }}</h1>
-        <p class="text-lg">{{ event.description }}</p>
-        <div class="stats shadow w-full">
-          <div class="stat">
-            <div class="stat-title">Date & Time</div>
-            <div class="stat-value">{{ event.time }}</div>
-          </div>
-          <div class="stat">
-            <div class="stat-title">Location</div>
-            <div class="stat-value">{{ event.location }}</div>
-          </div>
-        </div>
-        <div class="card-actions">
-          <button class="btn btn-primary btn-lg">Register Now</button>
-        </div>
+  <main class="pt-20 p-0 max-w-4xl mx-auto">
+    <router-link :to="{ name: 'events'}" class="btn btn-ghost mb-8">
+        ← Back to Events
+    </ router-link>
+    <div v-if="event" class="card bg-base-100  border-2 border-gray px-5 py-5">
+      <div class="gap-2 flex flex-col">
+        <h1 class="text-4xl font-black">{{ event.title }}</h1>
+        <p class="text-lg">{{ event.description}}</p>
       </div>
+        <p class="text-lg mt-5">⏰ {{ event.time }}</p>
+        <p class="text-lg mt-1">📍 {{ event.location }}</p>
+        <button class="w-full mt-6 rounded-lg btn btn-primary py-2">Register</button>
     </div>
     <div v-else class="text-center py-20">
       <h1 class="text-2xl">Event not found</h1>
+
     </div>
   </main>
 </template>
