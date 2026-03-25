@@ -1,0 +1,46 @@
+services:
+
+  registration:
+    build: ./registration
+    ports:
+      - "5000:5000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    restart: always
+
+  event:
+    build: ./event
+    ports:
+      - "5001:5001"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    restart: always
+
+  volunteer:
+    build: ./volunteer
+    ports:
+      - "5002:5002"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    restart: always
+
+  waitlist:
+    build: ./waitlist
+    ports:
+      - "5003:5003"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    restart: always
+
+  organiser:
+    build: ./organiser
+    ports:
+      "5004:5004"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    restart: always
