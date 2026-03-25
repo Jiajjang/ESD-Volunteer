@@ -66,22 +66,41 @@ def get_by_event_and_volunteer(event_id, volunteer_id):
 def add_registration():
     data = request.get_json()
     existing = getData({"volunteer_id": data["volunteer_id"], "event_id": data["event_id"]})
-    if existing and existing[0]["status"] in ["confirmed", "pending"]:
+    if existing and existing[0]["status"] in ["confirmed", "waitlisted"]:
         return jsonify({"code": 400, "message": "User already registered"}), 400
 
     registration = {
         "volunteer_id": data["volunteer_id"],
-        "email": data["email"],
-        "event_id": data["event_id"],
-        "status": data["status"],
+        "email":        data["email"],
+        "event_id":     data["event_id"],
+        "status":       data.get("status", "confirmed"),  # ← use what composite sends
         "registered_at": datetime.now(sg_tz).isoformat(),
-        "expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        "expires_at":   None                              # ← always null
     }
 
-    supabase.table("registration").insert(registration).execute()
-    print(type(registration), registration)
-    data = registration[0] if isinstance(registration, list) else registration
-    return jsonify({"code": 201, "data": data}), 201
+    result = supabase.table("registration").insert(registration).execute()
+    return jsonify({"code": 201, "data": result.data[0]}), 201
+
+# @app.route("/registration", methods=["POST"])
+# def add_registration():
+#     data = request.get_json()
+#     existing = getData({"volunteer_id": data["volunteer_id"], "event_id": data["event_id"]})
+#     if existing and existing[0]["status"] in ["confirmed", "pending"]:
+#         return jsonify({"code": 400, "message": "User already registered"}), 400
+
+#     registration = {
+#         "volunteer_id": data["volunteer_id"],
+#         "email": data["email"],
+#         "event_id": data["event_id"],
+#         "status": data["status"],
+#         "registered_at": datetime.now(sg_tz).isoformat(),
+#         "expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+#     }
+
+#     supabase.table("registration").insert(registration).execute()
+#     print(type(registration), registration)
+#     data = registration[0] if isinstance(registration, list) else registration
+#     return jsonify({"code": 201, "data": data}), 201
 
 # ─── DELETE ───
 @app.route("/registration", methods=["DELETE"])

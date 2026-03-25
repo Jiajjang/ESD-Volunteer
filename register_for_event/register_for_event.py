@@ -54,10 +54,17 @@ def register_for_event():
 
     # ── Step 2 & 3: Try to increment event capacity ──────────────
     event_resp = requests.put(
-        f"{EVENT_URL}/event/{event_id}/increment"
+        f"{EVENT_URL}/event/{event_id}/capacity",
+        json={"action": "increment"}        # ← matches your event service
     )
 
     event_full = event_resp.status_code == 400      # 400 = full, 200 = incremented
+    
+    # event_resp = requests.put(
+    #     f"{EVENT_URL}/event/{event_id}/increment"
+    # )
+
+    # event_full = event_resp.status_code == 400      # 400 = full, 200 = incremented
 
     # ── Step 4 & 5: Fetch volunteer particulars ──────────────────
     vol_resp = requests.get(f"{VOLUNTEER_URL}/volunteer/{volunteer_id}")
@@ -94,30 +101,37 @@ def register_for_event():
     if reg_resp.status_code not in (200, 201):
         return jsonify({"code": 500, "message": "Failed to create registration."}), 500
 
-    # registration = reg_resp.json()["data"]
-    resp = requests.get(f"{REGISTRATION_URL}/registration/{event_id}/{volunteer_id}")
-    print(f"RESPONSE: {resp}")
-    logger.debug(f"Registration: {resp}")
+    registration_id = reg_resp.json()["data"]["registration_id"]  # ← direct, no second GET needed
 
-    if resp.ok:
-        data = resp.json()["data"]
-        logger.debug(f"Registration: {data}")
-        registration_id = data["Registrations"][0]["registration_id"] if data else None
-    else:
-        registration_id = None
+    # registration = reg_resp.json()["data"]
+    # resp = requests.get(f"{REGISTRATION_URL}/registration/{event_id}/{volunteer_id}")
+    # print(f"RESPONSE: {resp}")
+    # logger.debug(f"Registration: {resp}")
+
+    # if resp.ok:
+    #     data = resp.json()["data"]
+    #     logger.debug(f"Registration: {data}")
+    #     registration_id = data["Registrations"][0]["registration_id"] if data else None
+    # else:
+    #     registration_id = None
     # registration_id = registration["registration_id"]
 
     # ── Fetch event details for response ─────────────────────────
-    if event_resp.ok and event_resp.text.strip():
-        event_details = event_resp.json()
-    else:
-        logger.warning(f"Event fetch failed: {event_resp.status_code} {event_resp.text[:100]}")
-        event_details = {}  # Fallback empty
-    logger.debug(f"Event_details: {event_details}")
+    event_detail_resp = requests.get(f"{EVENT_URL}/event/{event_id}")
+    event_data = event_detail_resp.json().get("data", {}) if event_detail_resp.ok else {}
+    start_date = event_data.get("start_date")
+    end_date   = event_data.get("end_date")
+
+    # if event_resp.ok and event_resp.text.strip():
+    #     event_details = event_resp.json()
+    # else:
+    #     logger.warning(f"Event fetch failed: {event_resp.status_code} {event_resp.text[:100]}")
+    #     event_details = {}  # Fallback empty
+    # logger.debug(f"Event_details: {event_details}")
 
 
-    start_date = event_details.get("data", {}).get("start_date")
-    end_date   = event_details.get("data", {}).get("end_date")
+    # start_date = event_details.get("data", {}).get("start_date")
+    # end_date   = event_details.get("data", {}).get("end_date")
 
     # ── Step 8/10b: Publish AMQP notification ────────────────────
     routing_key = "registration.waitlisted" if event_full else "registration.confirmed"

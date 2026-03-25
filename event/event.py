@@ -63,6 +63,17 @@ def get_all():
             "message": str(e)
         }), 500
 
+#Get Event by ID
+@app.route("/event/<int:event_id>", methods=['GET'])
+def get_by_id(event_id):
+    try:
+        response = supabase.table('event').select('*').eq('event_id', event_id).execute()
+        if response.data:
+            return jsonify({"code": 200, "data": response.data[0]})
+        return jsonify({"code": 404, "message": "Event not found"}), 404
+    except Exception as e:
+        return jsonify({"code": 500, "message": str(e)}), 500
+
 #Scenario 1 and 2 Update Capacity
 @app.route("/event/<int:event_id>/capacity", methods=['PUT'])
 def update_capacity(event_id):
