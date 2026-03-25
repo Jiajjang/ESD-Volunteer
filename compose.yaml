@@ -1,5 +1,28 @@
 services:
-
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+  waitlist:
+    build: ./waitlist
+    ports:
+      - "5003:5003"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - RABBITMQ_HOST=rabbitmq
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
   registration:
     build: ./registration
     ports:
@@ -23,15 +46,6 @@ services:
     build: ./volunteer
     ports:
       - "5002:5002"
-    environment:
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_KEY}
-    restart: always
-
-  waitlist:
-    build: ./waitlist
-    ports:
-      - "5003:5003"
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
@@ -64,9 +78,3 @@ services:
       - rabbitmq
     restart: always
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "5672:5672"    # AMQP
-      - "15672:15672"  # Management UI → localhost:15672
-    restart: always

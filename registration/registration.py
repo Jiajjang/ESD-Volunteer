@@ -54,6 +54,13 @@ def get_by_event(event_id):
         return jsonify({"code": 200, "data": {"Registrations": [format_registration(r) for r in registrations]}})
     return jsonify({"code": 400, "message": "Event not found"}), 400
 
+@app.route("/registration/<int:event_id>/<int:volunteer_id>")
+def get_by_event_and_volunteer(event_id, volunteer_id):
+    registrations = getData({"event_id": event_id, "volunteer_id" : volunteer_id})
+    if registrations:
+        return jsonify({"code": 200, "data": {"Registrations": [format_registration(r) for r in registrations]}})
+    return jsonify({"code": 400, "message": "Event not found"}), 400
+
 # ─── POST ───
 @app.route("/registration", methods=["POST"])
 def add_registration():
@@ -72,7 +79,9 @@ def add_registration():
     }
 
     supabase.table("registration").insert(registration).execute()
-    return jsonify({"code": 201, "data": registration}), 201
+    print(type(registration), registration)
+    data = registration[0] if isinstance(registration, list) else registration
+    return jsonify({"code": 201, "data": data}), 201
 
 # ─── DELETE ───
 @app.route("/registration", methods=["DELETE"])

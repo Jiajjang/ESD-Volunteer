@@ -7,6 +7,10 @@ app = Flask(__name__)
 CORS(app)
 load_dotenv()
 
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 # ── Atomic service URLs ──────────────────────────────────────────
 REGISTRATION_URL = os.getenv("REGISTRATION_URL",  "http://registration:5000")
 EVENT_URL        = os.getenv("EVENT_URL",         "http://event:5001")
@@ -89,13 +93,27 @@ def register_for_event():
     if reg_resp.status_code not in (200, 201):
         return jsonify({"code": 500, "message": "Failed to create registration."}), 500
 
-    registration    = reg_resp.json()["data"]
-    registration_id = registration["registration_id"]
+    # registration = reg_resp.json()["data"]
+    resp = requests.get(f"{REGISTRATION_URL}/registration/{event_id}/{volunteer_id}")
+    print(f"RESPONSE: {resp}")
+    logger.debug(f"Registration: {resp}")
+
+    if resp.ok:
+        data = resp.json()["data"]
+        logger.debug(f"Registration: {data}")
+        registration_id = data["Registrations"][0]["registration_id"] if data else None
+    else:
+        registration_id = None
+    # registration_id = registration["registration_id"]
 
     # ── Fetch event details for response ─────────────────────────
-    event_details = event_resp.json() if not event_full else requests.get(
-        f"{EVENT_URL}/event/{event_id}"
-    ).json()
+    if event_resp.ok and event_resp.text.strip():
+        event_details = event_resp.json()
+    else:
+        logger.warning(f"Event fetch failed: {event_resp.status_code} {event_resp.text[:100]}")
+        event_details = {}  # Fallback empty
+    logger.debug(f"Event_details: {event_details}")
+
 
     start_date = event_details.get("data", {}).get("start_date")
     end_date   = event_details.get("data", {}).get("end_date")
