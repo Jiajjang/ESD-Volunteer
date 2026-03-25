@@ -3,5 +3,4 @@ flask-sqlalchemy
 flask-cors
 python-dotenv
 pytz
-psycopg2-binary
-sqlalchemy
+supabase
