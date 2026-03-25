@@ -2,8 +2,8 @@ import requests
 import json
 
 # ── CONFIG ──────────────────────────────────────────────
-EVENT_ID = 1
-CONFIRMED_VOLUNTEER_ID = 12  # volunteer to cancel
+EVENT_ID = 10
+CONFIRMED_VOLUNTEER_ID = 38  # volunteer to cancel
 REGISTRATION_URL = "http://localhost:5000"          # Registration Service
 COMPOSITE_URL = "http://localhost:5010"             # Composite Service
 
