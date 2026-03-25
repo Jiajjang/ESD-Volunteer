@@ -80,6 +80,7 @@ def register_for_event():
 
     # ── Step 6a/8b: Create registration record ───────────────────
     status = "waitlisted" if event_full else "confirmed"
+    logger.info(f"status: {status}")
 
     reg_resp = requests.post(
         f"{REGISTRATION_URL}/registration",

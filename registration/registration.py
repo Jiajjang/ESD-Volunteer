@@ -73,7 +73,7 @@ def add_registration():
         "volunteer_id": data["volunteer_id"],
         "email": data["email"],
         "event_id": data["event_id"],
-        "status": "pending",
+        "status": data["status"],
         "registered_at": datetime.now(sg_tz).isoformat(),
         "expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
     }
