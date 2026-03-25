@@ -1,204 +1,129 @@
 from flask import Flask, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
-import pytz
+from supabase import create_client, Client
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import create_engine
+import pytz, os
 from dotenv import load_dotenv
-import os
 
-# Load environment variables from .env
+# Timezone
+sg_tz = pytz.timezone('Asia/Singapore')
+
+# Load environment variables
 load_dotenv()
 
-# Fetch variables
-USER = os.getenv("user")
-PASSWORD = os.getenv("password")
-HOST = os.getenv("host")
-PORT = os.getenv("port")
-DBNAME = os.getenv("dbname")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# Construct the SQLAlchemy connection string
-DATABASE_URL = f"postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DBNAME}?sslmode=require"
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Supabase credentials missing in .env")
 
-# Create the SQLAlchemy engine
-engine = create_engine(DATABASE_URL)
-# If using Transaction Pooler or Session Pooler, we want to ensure we disable SQLAlchemy client side pooling -
-# https://docs.sqlalchemy.org/en/20/core/pooling.html#switching-pool-implementations
-# engine = create_engine(DATABASE_URL, poolclass=NullPool)
-
-# Test the connection
-try:
-    with engine.connect() as connection:
-        print("Connection successful!")
-except Exception as e:
-    print(f"Failed to connect: {e}")
-
-
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 app = Flask(__name__)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_recycle': 299}
+# Helper to convert Supabase row to JSON
+def format_registration(reg):
+    return {
+        "registration_id": reg.get("registration_id"),
+        "volunteer_id": reg.get("volunteer_id"),
+        "email": reg.get("email"),
+        "event_id": reg.get("event_id"),
+        "status": reg.get("status"),
+        "registered_at": reg.get("registered_at"),
+        "expires_at": reg.get("expires_at")
+    }
 
-db = SQLAlchemy(app)
-
-class Registration(db.Model):
-    __tablename__ = "registration"
-    registrationID = db.Column(db.Integer, primary_key = True)
-    volunteerID = db.Column(db.Integer, nullable = False)
-    email = db.Column(db.String(50),nullable = False)
-    eventID = db.Column(db.Integer,nullable = False)
-    status = db.Column(db.String(25),nullable = False)
-    registeredAt = db.Column(db.DateTime,nullable = False)
-    expiresAt = db.Column(db.DateTime,nullable = False)
-    
-    def __init__(self, volunteerID, email, eventID, status, registeredAt, expiresAt):
-        # self.registrationID = registrationID
-        self.volunteerID = volunteerID
-        self.email = email
-        self.eventID = eventID
-        self.status = status
-        self.registeredAt = registeredAt
-        self.expiresAt = expiresAt
-
-    def json(self):
-        return {
-            "registrationID": self.registrationID, 
-            "volunteerID": self.volunteerID, 
-            "email": self.email, 
-            "eventID": self.eventID,
-            "status": self.status, 
-            "registeredAt": self.registeredAt,
-            "expiresAt": self.expiresAt
-        }
-
-# HELPER FUNCTION TO GET DATA
-def getData(filters : dict = None):
-    stmt = db.select(Registration)
+def getData(filters: dict = None):
+    query = supabase.table("registration").select("*")
     if filters:
-        stmt = stmt.filter_by(**filters)
-    return db.session.scalars(stmt)
+        for key, value in filters.items():
+            query = query.eq(key, value)
+    response = query.execute()
+    return response.data or []
 
-# [GET] RETRIEVE ALL REGISTRATION DETAILS ------------
+# ─── GET ───
 @app.route("/registration")
 def get_all():
-    registrationList = getData().all()
-    if len(registrationList):
-        return jsonify(
-            {
-                "code": 200,
-                "data": {
-                    "Registrations": [registration.json() for registration in registrationList]
-                }
-            }
-        )
-    else:
-        return jsonify({
-            "code":404,
-            "message": "There are no registrations."
-        })
+    registrations = getData()
+    if registrations:
+        return jsonify({"code": 200, "data": {"Registrations": [format_registration(r) for r in registrations]}})
+    return jsonify({"code": 404, "message": "No registrations found"}), 404
 
-# [GET] RETRIEVE REGISTRATION BY EVENTID
-@app.route("/registration/<int:eventID>")
-def get_by_eventID(eventID):
-    registrationList = getData({"eventID" : eventID})
-    if registrationList:
-        return jsonify(
-            {
-                "code": 200,
-                "data": {
-                    "Registrations": [registration.json() for registration in registrationList]
-                }
-            }
-        )
-    else:
-        return jsonify(
-            {
-            "code": 400,
-            "message": "Event not found"
-            }
-        ), 400
+@app.route("/registration/<int:event_id>")
+def get_by_event(event_id):
+    registrations = getData({"event_id": event_id})
+    if registrations:
+        return jsonify({"code": 200, "data": {"Registrations": [format_registration(r) for r in registrations]}})
+    return jsonify({"code": 400, "message": "Event not found"}), 400
 
-# [POST] VOLUNTEER REGISTERS  -------------
+# ─── POST ───
 @app.route("/registration", methods=["POST"])
 def add_registration():
     data = request.get_json()
-    checkStatus = getData({"volunteerID" : data["volunteerID"], "eventID" : data["eventID"]}).one_or_none()
-    if checkStatus:
-        if checkStatus.status in ["confirmed","pending"]:
-            return jsonify(
-                {
-                    "code": 400,
-                    "message": "User already registered for this event"
-                }
-            ), 400
+    existing = getData({"volunteer_id": data["volunteer_id"], "event_id": data["event_id"]})
+    if existing and existing[0]["status"] in ["confirmed", "pending"]:
+        return jsonify({"code": 400, "message": "User already registered"}), 400
 
-    registration = Registration(
-    volunteerID =data['volunteerID'],
-    email =data['email'],
-    eventID =data['eventID'],
-    status ='pending', # need to call events service to check capacity first.
-    registeredAt =datetime.now(sg_tz),
-    expiresAt=datetime.now(timezone.utc) + timedelta(days=1)
-)
-    try: 
-        db.session.add(registration)
-        db.session.commit()
-    except:
-        return jsonify({
-            "code": 500,
-            "message":"An error occured while registering user"
-        }), 500
-        
-    return jsonify({
-        "code":201,
-        "data": registration.json()
-    }), 201
-        
+    registration = {
+        "volunteer_id": data["volunteer_id"],
+        "email": data["email"],
+        "event_id": data["event_id"],
+        "status": "pending",
+        "registered_at": datetime.now(sg_tz).isoformat(),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    }
 
-# [DELETE] VOLUNTEER CANCEL REGISTRATION ----------
-@app.route("/registration",methods=["DELETE"])
+    supabase.table("registration").insert(registration).execute()
+    return jsonify({"code": 201, "data": registration}), 201
+
+# ─── DELETE ───
+@app.route("/registration", methods=["DELETE"])
 def cancel_registration():
     data = request.get_json()
-    user = getData({"volunteerID" : data["volunteerID"], "eventID" :data["eventID"]}).one_or_none()
-    if user:
-        try:
-            db.session.delete(user)
-            db.session.commit()
-            return jsonify({
-                "code":200,
-                "message": "Deletion Success"
-            })
-        except:
-            db.session.rollback()
-            return jsonify({
-                "code": 500,
-                "message": "An error occured while deleting user"
-            }), 500
-    else:
-        return jsonify({
-            "code": 400,
-            "message": "User not found."
-        }),400
-        
-# [PUT] UPDATE VOLUNTEER STATUS (PENDING -> CONFIRMED) ------------
+    deleted = supabase.table("registration")\
+        .delete()\
+        .eq("volunteer_id", data["volunteer_id"])\
+        .eq("event_id", data["event_id"])\
+        .execute()
+    if deleted.data:
+        return jsonify({"code": 200, "message": "Deletion Success"})
+    return jsonify({"code": 400, "message": "User not found"}), 400
+
+# ─── PUT (update to confirmed) ───
 @app.route("/registration", methods=["PUT"])
 def update_registration():
     data = request.get_json()
-    checkUser = getData({"volunteerID": data["volunteerID"], "eventID":data["eventID"]}).one_or_none()
-    if not checkUser:
-        return jsonify({
-            "code": 400,
-            "message": "User not found"
-        }), 400
-    else:
-        checkUser.status = "confirmed"
-        db.session.commit()
+    updated = supabase.table("registration")\
+        .update({"status": "confirmed"})\
+        .eq("volunteer_id", data["volunteer_id"])\
+        .eq("event_id", data["event_id"])\
+        .execute()
+    if updated.data:
+        return jsonify({"code": 200, "message": "User status updated successfully", "data": format_registration(updated.data[0])})
+    return jsonify({"code": 400, "message": "User not found"}), 400
+
+# ─── PUT /registration/status (used by composite) ───
+@app.route("/registration/status", methods=["PUT"])
+def update_registration_status():
+    data = request.get_json()
+    volunteer_id = data.get("volunteerID")
+    event_id = data.get("eventID")
+    status = data.get("status")
+
+    if not all([volunteer_id, event_id, status]):
+        return jsonify({"code": 400, "message": "volunteerID, eventID, and status are required"}), 400
+
+    updated = supabase.table("registration")\
+        .update({"status": status})\
+        .eq("volunteer_id", volunteer_id)\
+        .eq("event_id", event_id)\
+        .execute()
+
+    if updated.data:
         return jsonify({
             "code": 200,
             "message": "User status updated successfully",
-            "data" : checkUser.json()
+            "data": format_registration(updated.data[0])
         })
-        
+    return jsonify({"code": 400, "message": "User not found"}), 400
 
-if __name__ == '__main__':
-    app.run(port=5000, debug = True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)

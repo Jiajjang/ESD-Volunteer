@@ -7,6 +7,7 @@ services:
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
+      - DATABASE_URL=${DATABASE_URL}
     restart: always
 
   event:
@@ -50,10 +51,10 @@ services:
     ports:
       - "5010:5010"
     environment:
-      - EVENT_URL=http://event:5002
-      - VOLUNTEER_URL=http://volunteer:5003
-      - REGISTRATION_URL=http://registration:5001
-      - WAITLIST_URL=http://waitlist:5004
+      - REGISTRATION_URL=http://registration:5000
+      - EVENT_URL=http://event:5001
+      - VOLUNTEER_URL=http://volunteer:5002
+      - WAITLIST_URL=http://waitlist:5003
       - RABBITMQ_HOST=rabbitmq
     depends_on:
       - event

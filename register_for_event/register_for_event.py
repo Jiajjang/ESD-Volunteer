@@ -8,10 +8,10 @@ CORS(app)
 load_dotenv()
 
 # ── Atomic service URLs ──────────────────────────────────────────
-REGISTRATION_URL = os.getenv("REGISTRATION_URL",  "http://registration:5001")
-EVENT_URL        = os.getenv("EVENT_URL",         "http://event:5002")
-VOLUNTEER_URL    = os.getenv("VOLUNTEER_URL",     "http://volunteer:5003")
-WAITLIST_URL     = os.getenv("WAITLIST_URL",      "http://waitlist:5004")
+REGISTRATION_URL = os.getenv("REGISTRATION_URL",  "http://registration:5000")
+EVENT_URL        = os.getenv("EVENT_URL",         "http://event:5001")
+VOLUNTEER_URL    = os.getenv("VOLUNTEER_URL",     "http://volunteer:5002")
+WAITLIST_URL     = os.getenv("WAITLIST_URL",      "http://waitlist:5003")
 RABBITMQ_HOST    = os.getenv("RABBITMQ_HOST",     "rabbitmq")
 
 
@@ -68,8 +68,7 @@ def register_for_event():
         wl_resp = requests.post(
             f"{WAITLIST_URL}/waitlist",
             json={
-                "volunteer_id": volunteer_id,
-                "event_id":     event_id
+                "volunteer_id": volunteer_id
             }
         )
         if wl_resp.status_code not in (200, 201):
