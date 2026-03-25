@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from dotenv import load_dotenv
 import os
 
+sg_tz = pytz.timezone('Asia/Singapore')
 # Load environment variables from .env
 load_dotenv()
 
@@ -43,32 +44,32 @@ db = SQLAlchemy(app)
 
 class Registration(db.Model):
     __tablename__ = "registration"
-    registrationID = db.Column(db.Integer, primary_key = True)
-    volunteerID = db.Column(db.Integer, nullable = False)
+    registration_id = db.Column(db.Integer, primary_key = True)
+    volunteer_id = db.Column(db.Integer, nullable = False)
     email = db.Column(db.String(50),nullable = False)
-    eventID = db.Column(db.Integer,nullable = False)
+    event_id = db.Column(db.Integer,nullable = False)
     status = db.Column(db.String(25),nullable = False)
-    registeredAt = db.Column(db.DateTime,nullable = False)
-    expiresAt = db.Column(db.DateTime,nullable = False)
+    registered_at = db.Column(db.DateTime,nullable = False)
+    expires_at = db.Column(db.DateTime,nullable = False)
     
-    def __init__(self, volunteerID, email, eventID, status, registeredAt, expiresAt):
-        # self.registrationID = registrationID
-        self.volunteerID = volunteerID
+    def __init__(self, volunteer_id, email, event_id, status, registered_at, expires_at):
+        # self.registration_id = registration_id
+        self.volunteer_id = volunteer_id
         self.email = email
-        self.eventID = eventID
+        self.event_id = event_id
         self.status = status
-        self.registeredAt = registeredAt
-        self.expiresAt = expiresAt
+        self.registered_at = registered_at
+        self.expires_at = expires_at
 
     def json(self):
         return {
-            "registrationID": self.registrationID, 
-            "volunteerID": self.volunteerID, 
+            "registration_id": self.registration_id, 
+            "volunteer_id": self.volunteer_id, 
             "email": self.email, 
-            "eventID": self.eventID,
+            "event_id": self.event_id,
             "status": self.status, 
-            "registeredAt": self.registeredAt,
-            "expiresAt": self.expiresAt
+            "registered_at": self.registered_at,
+            "expires_at": self.expires_at
         }
 
 # HELPER FUNCTION TO GET DATA
@@ -98,9 +99,9 @@ def get_all():
         })
 
 # [GET] RETRIEVE REGISTRATION BY EVENTID
-@app.route("/registration/<int:eventID>")
-def get_by_eventID(eventID):
-    registrationList = getData({"eventID" : eventID})
+@app.route("/registration/<int:event_id>")
+def get_by_eventID(event_id):
+    registrationList = getData({"event_id" : event_id})
     if registrationList:
         return jsonify(
             {
@@ -122,7 +123,7 @@ def get_by_eventID(eventID):
 @app.route("/registration", methods=["POST"])
 def add_registration():
     data = request.get_json()
-    checkStatus = getData({"volunteerID" : data["volunteerID"], "eventID" : data["eventID"]}).one_or_none()
+    checkStatus = getData({"volunteer_id" : data["volunteer_id"], "event_id" : data["event_id"]}).one_or_none()
     if checkStatus:
         if checkStatus.status in ["confirmed","pending"]:
             return jsonify(
@@ -133,12 +134,12 @@ def add_registration():
             ), 400
 
     registration = Registration(
-    volunteerID =data['volunteerID'],
+    volunteer_id =data['volunteer_id'],
     email =data['email'],
-    eventID =data['eventID'],
+    event_id =data['event_id'],
     status ='pending', # need to call events service to check capacity first.
-    registeredAt =datetime.now(sg_tz),
-    expiresAt=datetime.now(timezone.utc) + timedelta(days=1)
+    registered_at =datetime.now(sg_tz),
+    expires_at =datetime.now(timezone.utc) + timedelta(days=1)
 )
     try: 
         db.session.add(registration)
@@ -159,7 +160,7 @@ def add_registration():
 @app.route("/registration",methods=["DELETE"])
 def cancel_registration():
     data = request.get_json()
-    user = getData({"volunteerID" : data["volunteerID"], "eventID" :data["eventID"]}).one_or_none()
+    user = getData({"volunteer_id" : data["volunteer_id"], "event_id" :data["event_id"]}).one_or_none()
     if user:
         try:
             db.session.delete(user)
@@ -184,7 +185,7 @@ def cancel_registration():
 @app.route("/registration", methods=["PUT"])
 def update_registration():
     data = request.get_json()
-    checkUser = getData({"volunteerID": data["volunteerID"], "eventID":data["eventID"]}).one_or_none()
+    checkUser = getData({"volunteer_id": data["volunteer_id"], "event_id":data["event_id"]}).one_or_none()
     if not checkUser:
         return jsonify({
             "code": 400,
