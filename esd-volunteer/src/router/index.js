@@ -1,15 +1,21 @@
 import { createRouter, createWebHistory } from "vue-router";
-
 import EventsView from '@/views/events.vue'
+import EventDetailsView from '@/views/eventDetails.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),  // Clean URLs
   routes : [
     {
-      path : '/',
+      path : '/events',
       name: "events",
       component : EventsView,
-      // meta : {requiresAuth: false}
+    },
+    {
+      path: '/eventDetails/:id',
+      name: "eventDetails",
+      component : EventDetailsView,
+      props : true
+
     }
   ]
 })
