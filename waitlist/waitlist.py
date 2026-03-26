@@ -6,6 +6,10 @@ from flask_cors import CORS
 from supabase import create_client
 import os, json, threading, pika, logging
 
+from datetime import datetime
+import pytz
+sg_tz = pytz.timezone('Asia/Singapore')
+
 app = Flask(__name__)
 CORS(app)
 
@@ -70,7 +74,11 @@ def add_to_waitlist(event_id):
 
     # Insert new entry — joined_at defaults to now() in Supabase
     response = supabase.table('waitlist') \
-        .insert({'event_id': event_id, 'volunteer_id': volunteer_id}) \
+        .insert({
+            'event_id': event_id, 
+            'volunteer_id': volunteer_id,
+            'joined_at': datetime.now(sg_tz).strftime('%Y-%m-%d %H:%M:%S')
+            }) \
         .execute()
 
     if response.data:

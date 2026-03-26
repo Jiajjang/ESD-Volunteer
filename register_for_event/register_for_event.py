@@ -77,13 +77,21 @@ def register_for_event():
     # ── Step 6b: Add to waitlist if event is full ────────────────
     if event_full:
         wl_resp = requests.post(
-            f"{WAITLIST_URL}/waitlist",
-            json={
-                "volunteer_id": volunteer_id
-            }
+            f"{WAITLIST_URL}/waitlist/{event_id}",    # ← add event_id to URL
+            json={"volunteer_id": volunteer_id}        # ← only volunteer_id in body
         )
-        if wl_resp.status_code not in (200, 201):
+        if wl_resp.status_code not in (200, 201, 409):  # ← 409 = already in waitlist, still ok
             return jsonify({"code": 500, "message": "Failed to add to waitlist."}), 500
+    
+    # if event_full:
+    #     wl_resp = requests.post(
+    #         f"{WAITLIST_URL}/waitlist",
+    #         json={
+    #             "volunteer_id": volunteer_id
+    #         }
+    #     )
+    #     if wl_resp.status_code not in (200, 201):
+    #         return jsonify({"code": 500, "message": "Failed to add to waitlist."}), 500
 
     # ── Step 6a/8b: Create registration record ───────────────────
     status = "waitlisted" if event_full else "confirmed"

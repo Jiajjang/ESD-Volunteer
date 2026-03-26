@@ -13,3 +13,4 @@ supabase
 websockets
 pika
 python-dotenv
+pytz
