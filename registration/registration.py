@@ -74,7 +74,7 @@ def add_registration():
         "email":        data["email"],
         "event_id":     data["event_id"],
         "status":       data.get("status", "confirmed"),  # ← use what composite sends
-        "registered_at": datetime.now(sg_tz).isoformat(),
+        "registered_at": datetime.now(sg_tz).strftime('%Y-%m-%d %H:%M:%S'),
         "expires_at":   None                              # ← always null
     }
 
