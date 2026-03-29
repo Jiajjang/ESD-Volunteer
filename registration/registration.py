@@ -75,7 +75,7 @@ def add_registration():
         "event_id":     data["event_id"],
         "status":       data.get("status", "confirmed"),  # ← use what composite sends
         "registered_at": datetime.now(sg_tz).strftime('%Y-%m-%d %H:%M:%S'),
-        "expires_at":   None                              # ← always null
+        "expires_at":   data.get("expires_at") if data.get("status") == "pending" else None #felicia
     }
 
     result = supabase.table("registration").insert(registration).execute()
@@ -132,15 +132,19 @@ def update_registration():
 @app.route("/registration/status", methods=["PUT"])
 def update_registration_status():
     data = request.get_json()
-    volunteer_id = data.get("volunteerID")
-    event_id = data.get("eventID")
+    volunteer_id = data.get("volunteer_id")
+    event_id = data.get("event_id")
     status = data.get("status")
+    expires_at = data.get("expires_at") #felicia
 
     if not all([volunteer_id, event_id, status]):
-        return jsonify({"code": 400, "message": "volunteerID, eventID, and status are required"}), 400
+        return jsonify({"code": 400, "message": "volunteer_id, event_id, and status are required"}), 400
 
     updated = supabase.table("registration")\
-        .update({"status": status})\
+        .update({ #felicia
+                "status": status,
+                "expires_at": expires_at if status == "pending" else None
+            })\
         .eq("volunteer_id", volunteer_id)\
         .eq("event_id", event_id)\
         .execute()

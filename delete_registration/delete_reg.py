@@ -1,34 +1,41 @@
 from flask import Flask, request, jsonify
 import requests, os
+from datetime import datetime, timedelta
+import pytz
+
+# Timezone
+sg_tz = pytz.timezone('Asia/Singapore')
 
 app = Flask(__name__)
 
-REGISTRATION_URL = os.getenv("REGISTRATION_SERVICE_URL", "http://localhost:5000")
-WAITLIST_URL = os.getenv("WAITLIST_SERVICE_URL", "http://localhost:5003")
+REGISTRATION_URL = os.getenv("REGISTRATION_SERVICE_URL", "http://registration:5000")
+WAITLIST_URL = os.getenv("WAITLIST_SERVICE_URL", "http://waitlist:5003")
+EVENT_URL = os.getenv("EVENT_SERVICE_URL", "http://event:5001")
 
 @app.route("/cancel-registration", methods=["POST"])
 def cancel_registration():
     data = request.get_json()
-    volunteer_id = data.get("volunteerID")
-    event_id = data.get("eventID")
+    volunteer_id = data.get("volunteer_id")
+    event_id = data.get("event_id")
 
     if not volunteer_id or not event_id:
         return jsonify({
             "code": 400,
-            "message": "volunteerID and eventID are required"
+            "message": "volunteer_id and event_id are required"
         }), 400
 
-    # Step 1: Cancel the confirmed registration
+    # Step 1: Cancel the confirmed registration (STEP 2. STEP 3,4 MISSING)
     cancel_resp = requests.put(
         f"{REGISTRATION_URL}/registration/status",
         json={
-            "volunteerID": volunteer_id,
-            "eventID": event_id,
-            "status": "cancelled"
+            "volunteer_id": volunteer_id,
+            "event_id": event_id,
+            "status": "cancelled",
+            "expires_at": None
         }
     )
 
-    if cancel_resp.status_code != 200:
+    if cancel_resp.status_code != 200: #WHAT TO DO AFTER THIS?
         return jsonify({
             "code": cancel_resp.status_code,
             "message": f"Failed to cancel registration: {cancel_resp.text}"
@@ -39,7 +46,7 @@ def cancel_registration():
     # Step 2: Get next waitlisted volunteer
     waitlist_resp = requests.get(f"{WAITLIST_URL}/waitlist/{event_id}/next")
 
-    if waitlist_resp.status_code != 200:
+    if waitlist_resp.status_code != 200: #WHAT TO DO AFTER THIS?
         return jsonify({
             "code": 500,
             "message": "Cancelled volunteer, but failed to retrieve next waitlisted volunteer",
@@ -72,9 +79,10 @@ def cancel_registration():
         promote_resp = requests.put(
             f"{REGISTRATION_URL}/registration/status",
             json={
-                "volunteerID": promoted_volunteer_id,
-                "eventID": event_id,
-                "status": "pending"
+                "volunteer_id": promoted_volunteer_id,
+                "event_id": event_id,
+                "status": "pending",
+                "expires_at" : (datetime.now(sg_tz) + timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S') #need double check 
             }
         )
 
@@ -101,4 +109,4 @@ def cancel_registration():
     }), 200
 
 if __name__ == "__main__":
-    app.run(port=5010, debug=True)
+    app.run(host="0.0.0.0", port=5011, debug=False)

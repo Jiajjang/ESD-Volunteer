@@ -30,7 +30,6 @@ services:
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
-      - DATABASE_URL=${DATABASE_URL}
     restart: always
 
   event:
@@ -64,6 +63,24 @@ services:
     build: ./register_for_event
     ports:
       - "5010:5010"
+    environment:
+      - REGISTRATION_URL=http://registration:5000
+      - EVENT_URL=http://event:5001
+      - VOLUNTEER_URL=http://volunteer:5002
+      - WAITLIST_URL=http://waitlist:5003
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - event
+      - volunteer
+      - registration
+      - waitlist
+      - rabbitmq
+    restart: always
+
+  delete_registration:
+    build: ./delete_registration
+    ports:
+      - "5011:5011"
     environment:
       - REGISTRATION_URL=http://registration:5000
       - EVENT_URL=http://event:5001
