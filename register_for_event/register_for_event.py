@@ -20,8 +20,8 @@ WAITLIST_URL     = os.getenv("WAITLIST_URL",      "http://waitlist:5003")
 RABBITMQ_HOST  = os.getenv("RABBITMQ_HOST", "active-white-bear-01.rmq6.cloudamqp.com")
 RABBITMQ_PORT  = int(os.getenv("RABBITMQ_PORT", 5672))
 RABBITMQ_VHOST = os.getenv("RABBITMQ_VHOST", "ntxsydfp")
-RABBITMQ_USER  = os.getenv("RABBITMQ_USERNAME", "ntxsydfp")
-RABBITMQ_PASS  = os.getenv("RABBITMQ_PASSWORD", "VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9")
+RABBITMQ_USER  = os.getenv("RABBITMQ_USER", "ntxsydfp")
+RABBITMQ_PASS  = os.getenv("RABBITMQ_PASS", "VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9")
 
 
 # ── AMQP helper ──────────────────────────────────────────────────
@@ -109,7 +109,7 @@ def register_for_event():
     # ── Fetch event details for response ─────────────────────────
     event_detail_resp = requests.get(f"{EVENT_URL}/event/{event_id}")
     event_data = event_detail_resp.json().get("data", {}) if event_detail_resp.ok else {}
-    event_name = event_data.get("event_name")
+    event_name = event_data.get("name")
     location   = event_data.get("location")
     start_date = event_data.get("start_date")
     end_date   = event_data.get("end_date")
