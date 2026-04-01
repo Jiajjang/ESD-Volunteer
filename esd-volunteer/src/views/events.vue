@@ -47,8 +47,8 @@ export default {
         <h1 class="text-4xl py-8 font-bold">Events</h1>
         <div v-if="loading">Loading...</div>
         <div v-if="error" class="text-red-500">{{ error }}</div>
-        <div v-else="events.length" class="grid-cols-3 gap-8 grid">
-            <EventsCard v-for="event in events" :key="event.id" :event="event" />
+        <div v-else-if="events.length" class="grid-cols-3 gap-8 grid">
+            <EventsCard v-for="event in events" :key="event.event_id" :event="event" />
         </div>
     </main>
 </template>

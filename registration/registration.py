@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from supabase import create_client, Client
+from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
 import pytz, os
 from dotenv import load_dotenv
@@ -18,6 +19,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 app = Flask(__name__)
+CORS(app)
 
 # Helper to convert Supabase row to JSON
 def format_registration(reg):
@@ -57,6 +59,13 @@ def get_by_event(event_id):
 @app.route("/registration/<int:event_id>/<int:volunteer_id>")
 def get_by_event_and_volunteer(event_id, volunteer_id):
     registrations = getData({"event_id": event_id, "volunteer_id" : volunteer_id})
+    if registrations:
+        return jsonify({"code": 200, "data": {"Registrations": [format_registration(r) for r in registrations]}})
+    return jsonify({"code": 400, "message": "Event not found"}), 400
+
+@app.route("/registration/volunteer/<int:volunteer_id>")
+def get_by_volunteer(volunteer_id):
+    registrations = getData({ "volunteer_id" : volunteer_id})
     if registrations:
         return jsonify({"code": 200, "data": {"Registrations": [format_registration(r) for r in registrations]}})
     return jsonify({"code": 400, "message": "Event not found"}), 400

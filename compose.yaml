@@ -95,3 +95,22 @@ services:
       - rabbitmq
     restart: always
 
+  get_event_by_volunteer:
+    build: ./get_event_by_volunteer
+    ports:
+      - "5012:5012"
+    environment:
+      - REGISTRATION_URL=http://registration:5000
+      - EVENT_URL=http://event:5001
+      - VOLUNTEER_URL=http://volunteer:5002
+      - WAITLIST_URL=http://waitlist:5003
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - event
+      - volunteer
+      - registration
+      - waitlist
+      - rabbitmq
+    restart: always
+    
+

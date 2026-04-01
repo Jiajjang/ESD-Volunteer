@@ -1,0 +1,58 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import pika, json, os, requests
+from dotenv import load_dotenv
+
+app = Flask(__name__)
+CORS(app)
+load_dotenv()
+
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# ── Atomic service URLs ──────────────────────────────────────────
+REGISTRATION_URL = os.getenv("REGISTRATION_URL",  "http://registration:5000")
+EVENT_URL        = os.getenv("EVENT_URL",         "http://event:5001")
+VOLUNTEER_URL    = os.getenv("VOLUNTEER_URL",     "http://volunteer:5002")
+WAITLIST_URL     = os.getenv("WAITLIST_URL",      "http://waitlist:5003")
+
+
+@app.route("/get_event_by_volunteer/<int:volunteer_id>", methods = ["GET"])
+def get_event_by_volunteer(volunteer_id):    
+    #Step 1: Get registrations by volunteer id
+    vol_events = []
+    registrations_resp = requests.get(
+    f"{REGISTRATION_URL}/registration/volunteer/{volunteer_id}")
+    
+    if registrations_resp.status_code != 200:
+        return jsonify({"code": 404, "message": "Volunteer not found."}), 404
+    
+    registrations = registrations_resp.json().get("data", {}).get("Registrations", [])
+    event_ids = [r.get("event_id") for r in registrations if r.get("event_id") is not None]
+    
+    #Step 2: Match registration event id to events
+    if event_ids:
+        for event_id in event_ids:
+            events_resp = requests.get(f"{EVENT_URL}/event/{event_id}")
+
+            if events_resp.status_code != 200:
+                continue
+
+            events = events_resp.json()
+            
+            event = events.get("data")
+
+            if event:
+                vol_events.append(event)
+
+    return jsonify({
+        "code": 200,
+        "data": {
+            "events": vol_events
+        }
+    }), 200
+            
+if __name__ == "__main__":
+    print("Get event by volunteer composite microservice running...")
+    app.run(host="0.0.0.0", port=5012, debug=True)
