@@ -16,23 +16,34 @@ REGISTRATION_URL = os.getenv("REGISTRATION_URL",  "http://registration:5000")
 EVENT_URL        = os.getenv("EVENT_URL",         "http://event:5001")
 VOLUNTEER_URL    = os.getenv("VOLUNTEER_URL",     "http://volunteer:5002")
 WAITLIST_URL     = os.getenv("WAITLIST_URL",      "http://waitlist:5003")
-RABBITMQ_HOST    = os.getenv("RABBITMQ_HOST",     "rabbitmq")
+
+RABBITMQ_HOST  = os.getenv("RABBITMQ_HOST", "active-white-bear-01.rmq6.cloudamqp.com")
+RABBITMQ_PORT  = int(os.getenv("RABBITMQ_PORT", 5672))
+RABBITMQ_VHOST = os.getenv("RABBITMQ_VHOST", "ntxsydfp")
+RABBITMQ_USER  = os.getenv("RABBITMQ_USER", "ntxsydfp")
+RABBITMQ_PASS  = os.getenv("RABBITMQ_PASS", "VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9")
 
 
 # ── AMQP helper ──────────────────────────────────────────────────
 def publish_notification(routing_key: str, message: dict):
     try:
+        credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
         connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host=RABBITMQ_HOST)
+            pika.ConnectionParameters(
+                host=RABBITMQ_HOST,
+                port=RABBITMQ_PORT,
+                virtual_host=RABBITMQ_VHOST,
+                credentials=credentials
+            )
         )
         channel = connection.channel()
         channel.exchange_declare(
-            exchange="notification",
+            exchange="G2T7_topic.exchange",
             exchange_type="topic",
             durable=True
         )
         channel.basic_publish(
-            exchange="notification",
+            exchange="G2T7_topic.exchange",
             routing_key=routing_key,
             body=json.dumps(message),
             properties=pika.BasicProperties(delivery_mode=2)
@@ -55,16 +66,10 @@ def register_for_event():
     # ── Step 2 & 3: Try to increment event capacity ──────────────
     event_resp = requests.put(
         f"{EVENT_URL}/event/{event_id}/capacity",
-        json={"action": "increment"}        # ← matches your event service
+        json={"action": "increment"} 
     )
 
     event_full = event_resp.status_code == 400      # 400 = full, 200 = incremented
-    
-    # event_resp = requests.put(
-    #     f"{EVENT_URL}/event/{event_id}/increment"
-    # )
-
-    # event_full = event_resp.status_code == 400      # 400 = full, 200 = incremented
 
     # ── Step 4 & 5: Fetch volunteer particulars ──────────────────
     vol_resp = requests.get(f"{VOLUNTEER_URL}/volunteer/{volunteer_id}")
@@ -82,16 +87,6 @@ def register_for_event():
         )
         if wl_resp.status_code not in (200, 201, 409):  # ← 409 = already in waitlist, still ok
             return jsonify({"code": 500, "message": "Failed to add to waitlist."}), 500
-    
-    # if event_full:
-    #     wl_resp = requests.post(
-    #         f"{WAITLIST_URL}/waitlist",
-    #         json={
-    #             "volunteer_id": volunteer_id
-    #         }
-    #     )
-    #     if wl_resp.status_code not in (200, 201):
-    #         return jsonify({"code": 500, "message": "Failed to add to waitlist."}), 500
 
     # ── Step 6a/8b: Create registration record ───────────────────
     status = "waitlisted" if event_full else "confirmed"
@@ -111,43 +106,23 @@ def register_for_event():
 
     registration_id = reg_resp.json()["data"]["registration_id"]  # ← direct, no second GET needed
 
-    # registration = reg_resp.json()["data"]
-    # resp = requests.get(f"{REGISTRATION_URL}/registration/{event_id}/{volunteer_id}")
-    # print(f"RESPONSE: {resp}")
-    # logger.debug(f"Registration: {resp}")
-
-    # if resp.ok:
-    #     data = resp.json()["data"]
-    #     logger.debug(f"Registration: {data}")
-    #     registration_id = data["Registrations"][0]["registration_id"] if data else None
-    # else:
-    #     registration_id = None
-    # registration_id = registration["registration_id"]
-
     # ── Fetch event details for response ─────────────────────────
     event_detail_resp = requests.get(f"{EVENT_URL}/event/{event_id}")
     event_data = event_detail_resp.json().get("data", {}) if event_detail_resp.ok else {}
+    event_name = event_data.get("name")
+    location   = event_data.get("location")
     start_date = event_data.get("start_date")
     end_date   = event_data.get("end_date")
 
-    # if event_resp.ok and event_resp.text.strip():
-    #     event_details = event_resp.json()
-    # else:
-    #     logger.warning(f"Event fetch failed: {event_resp.status_code} {event_resp.text[:100]}")
-    #     event_details = {}  # Fallback empty
-    # logger.debug(f"Event_details: {event_details}")
-
-
-    # start_date = event_details.get("data", {}).get("start_date")
-    # end_date   = event_details.get("data", {}).get("end_date")
-
-    # ── Step 8/10b: Publish AMQP notification ────────────────────
+    # ── Step 8a/10b: Publish AMQP notification ────────────────────
     routing_key = "registration.waitlisted" if event_full else "registration.confirmed"
     publish_notification(routing_key, {
         "registration_id": registration_id,
         "volunteer_id":    volunteer_id,
         "email":           email,
         "event_id":        event_id,
+        "event_name":      event_name,
+        "location":        location,
         "start_date":      start_date,
         "end_date":        end_date,
         "status":          status
