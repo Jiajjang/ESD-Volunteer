@@ -16,23 +16,34 @@ REGISTRATION_URL = os.getenv("REGISTRATION_URL",  "http://registration:5000")
 EVENT_URL        = os.getenv("EVENT_URL",         "http://event:5001")
 VOLUNTEER_URL    = os.getenv("VOLUNTEER_URL",     "http://volunteer:5002")
 WAITLIST_URL     = os.getenv("WAITLIST_URL",      "http://waitlist:5003")
-RABBITMQ_HOST    = os.getenv("RABBITMQ_HOST",     "rabbitmq")
+
+RABBITMQ_HOST  = os.getenv("RABBITMQ_HOST", "active-white-bear-01.rmq6.cloudamqp.com")
+RABBITMQ_PORT  = int(os.getenv("RABBITMQ_PORT", 5672))
+RABBITMQ_VHOST = os.getenv("RABBITMQ_VHOST", "ntxsydfp")
+RABBITMQ_USER  = os.getenv("RABBITMQ_USERNAME", "ntxsydfp")
+RABBITMQ_PASS  = os.getenv("RABBITMQ_PASSWORD", "VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9")
 
 
 # ── AMQP helper ──────────────────────────────────────────────────
 def publish_notification(routing_key: str, message: dict):
     try:
+        credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
         connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host=RABBITMQ_HOST)
+            pika.ConnectionParameters(
+                host=RABBITMQ_HOST,
+                port=RABBITMQ_PORT,
+                virtual_host=RABBITMQ_VHOST,
+                credentials=credentials
+            )
         )
         channel = connection.channel()
         channel.exchange_declare(
-            exchange="notification",
+            exchange="G2T7_topic.exchange",
             exchange_type="topic",
             durable=True
         )
         channel.basic_publish(
-            exchange="notification",
+            exchange="G2T7_topic.exchange",
             routing_key=routing_key,
             body=json.dumps(message),
             properties=pika.BasicProperties(delivery_mode=2)
@@ -127,6 +138,8 @@ def register_for_event():
     # ── Fetch event details for response ─────────────────────────
     event_detail_resp = requests.get(f"{EVENT_URL}/event/{event_id}")
     event_data = event_detail_resp.json().get("data", {}) if event_detail_resp.ok else {}
+    event_name = event_data.get("event_name")
+    location   = event_data.get("location")
     start_date = event_data.get("start_date")
     end_date   = event_data.get("end_date")
 
@@ -148,6 +161,8 @@ def register_for_event():
         "volunteer_id":    volunteer_id,
         "email":           email,
         "event_id":        event_id,
+        "event_name":      event_name,
+        "location":        location,
         "start_date":      start_date,
         "end_date":        end_date,
         "status":          status
