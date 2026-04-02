@@ -1,12 +1,15 @@
 from flask import Flask, request, jsonify
 import requests, os
+from flask_cors import CORS
 from datetime import datetime, timedelta
 import pytz
+
 
 # Timezone
 sg_tz = pytz.timezone('Asia/Singapore')
 
 app = Flask(__name__)
+CORS(app)
 
 REGISTRATION_URL = os.getenv("REGISTRATION_SERVICE_URL", "http://registration:5000")
 WAITLIST_URL = os.getenv("WAITLIST_SERVICE_URL", "http://waitlist:5003")

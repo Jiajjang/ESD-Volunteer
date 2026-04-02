@@ -10,11 +10,12 @@ export default {
 
     data() {
         return {
-            events: [],
+            events : [],
+            // registeredEvents: [],
             loading: true,
             error: null,
             volunteer: null,
-            volunteer_id : 1
+            volunteer_id: 1,
         }
     },
 
@@ -22,6 +23,7 @@ export default {
         volunteerName() {
             return this.volunteer ? this.volunteer.volunteer_name : ''
         },
+
     },
 
     methods: {
@@ -41,9 +43,11 @@ export default {
             }
         },
 
-        async fetchVolunteerEvents(){
+        async fetchVolunteerEvents() {
             try {
-                const response = await fetch(`http://localhost:5012/get_event_by_volunteer/${this.volunteer_id}`)
+                const response = await fetch(
+                    `http://localhost:5012/get_event_by_volunteer/${this.volunteer_id}`,
+                )
                 if (!response.ok) throw new Error('API failed')
 
                 const data = await response.json()
@@ -55,7 +59,7 @@ export default {
             } finally {
                 this.loading = false
             }
-        }
+        },
     },
 
     mounted() {
@@ -66,25 +70,100 @@ export default {
 </script>
 
 <template>
-    <main>
-        <NavBar />
-        <div class="flex">
-            <div class="flex flex-col h-screen bg-gray-100 w-60 shrink-0 p-6">
-                <h2 v-if="volunteer" class="text-3xl font-semibold mb-4">
-                    {{ volunteer.volunteer_name }}
-                </h2>
-                <p class="text-lg font-semibold">Email</p>
-                <p v-if="volunteer" class="text-base">{{ volunteer.email }}</p>
-                <p class="text-lg font-semibold">Contact</p>
-                <p v-if="volunteer" class="text-base">{{ volunteer.phone_number }}</p>
-            </div>
-            <div class="p-10">
-                <div v-if="loading">Loading...</div>
-                <div v-if="error" class="text-red-500">{{ error }}</div>
-                <div v-else-if="events.length" class="grid-cols-3 gap-8 grid">
-                    <EventsCard v-for="event in events" :key="event.event_id" :event="event" />
+    <main class="h-screen flex flex-col bg-base-100 overflow-hidden">
+        <div class="sticky top-0 z-50 border-b border-base-300 bg-base-100/95 backdrop-blur">
+            <NavBar />
+        </div>
+
+        <div class="flex flex-1 overflow-hidden">
+            <aside class="w-80 shrink-0 border-r border-base-300 bg-base-100 p-6">
+                <div class="flex h-full flex-col rounded-2xl p-6 shadow-sm border border-base-300">
+                    <div
+                        class="flex flex-col items-center text-center border-b border-base-300 pb-6"
+                    >
+                        <div class="avatar placeholder mb-4">
+                            <div
+                                class="bg-emerald-100 text-emerald-700 rounded-full w-20 h-20 flex items-center justify-center"
+                            >
+                                <span class="text-2xl font-bold leading-none">
+                                    {{ volunteer?.volunteer_name?.charAt(0) || 'V' }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <h2 v-if="volunteer" class="text-2xl font-bold text-base-content">
+                            {{ volunteer.volunteer_name }}
+                        </h2>
+                        <p class="text-sm text-base-content/60 mt-1">Volunteer Profile</p>
+                    </div>
+
+                    <div class="mt-6 space-y-5">
+                        <div>
+                            <p
+                                class="text-xs font-semibold uppercase tracking-wide text-base-content/50"
+                            >
+                                Email
+                            </p>
+                            <p v-if="volunteer" class="mt-1 text-sm text-base-content">
+                                {{ volunteer.email }}
+                            </p>
+                        </div>
+
+                        <div>
+                            <p
+                                class="text-xs font-semibold uppercase tracking-wide text-base-content/50"
+                            >
+                                Contact
+                            </p>
+                            <p v-if="volunteer" class="mt-1 text-sm text-base-content">
+                                {{ volunteer.phone_number }}
+                            </p>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            </aside>
+
+            <section class="flex-1 min-h-0 overflow-y-auto p-8">
+                <div class="mx-auto max-w-7xl">
+                    <div class="mb-6 flex items-center justify-between">
+                        <div>
+                            <h1 class="text-3xl font-bold text-base-content">My Events</h1>
+                            <p class="mt-1 text-sm text-base-content/60">
+                                View the events you’ve registered for.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div v-if="loading" class="flex h-40 items-center justify-center">
+                        <span class="loading loading-spinner loading-lg text-emerald-600"></span>
+                    </div>
+
+                    <div v-else-if="error" class="alert alert-error shadow-sm">
+                        <span>{{ error }}</span>
+                    </div>
+
+                    <div
+                        v-else-if="events.length"
+                        class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3"
+                    >
+                        <EventsCard
+                            v-for="event in events"
+                            :key="event.event_id"
+                            :event="event"
+                            buttonText="View Event"
+                            :eventStatus="event.registration_status"
+                            :isRegistered="true"
+                        />
+                    </div>
+
+                    <div
+                        v-else
+                        class="flex h-40 items-center justify-center rounded-2xl border border-dashed border-base-300 bg-base-100"
+                    >
+                        <p class="text-base-content/60">No events found.</p>
+                    </div>
+                </div>
+            </section>
         </div>
     </main>
 </template>

@@ -18,33 +18,34 @@ VOLUNTEER_URL    = os.getenv("VOLUNTEER_URL",     "http://volunteer:5002")
 WAITLIST_URL     = os.getenv("WAITLIST_URL",      "http://waitlist:5003")
 
 
-@app.route("/get_event_by_volunteer/<int:volunteer_id>", methods = ["GET"])
-def get_event_by_volunteer(volunteer_id):    
-    #Step 1: Get registrations by volunteer id
-    vol_events = []
-    registrations_resp = requests.get(
-    f"{REGISTRATION_URL}/registration/volunteer/{volunteer_id}")
-    
+@app.route("/get_event_by_volunteer/<int:volunteer_id>", methods=["GET"])
+def get_event_by_volunteer(volunteer_id):
+    registrations_resp = requests.get(f"{REGISTRATION_URL}/registration/volunteer/{volunteer_id}")
+
     if registrations_resp.status_code != 200:
         return jsonify({"code": 404, "message": "Volunteer not found."}), 404
-    
+
     registrations = registrations_resp.json().get("data", {}).get("Registrations", [])
-    event_ids = [r.get("event_id") for r in registrations if r.get("event_id") is not None]
-    
-    #Step 2: Match registration event id to events
-    if event_ids:
-        for event_id in event_ids:
-            events_resp = requests.get(f"{EVENT_URL}/event/{event_id}")
+    vol_events = []
 
-            if events_resp.status_code != 200:
-                continue
+    for reg in registrations:
+        event_id = reg.get("event_id")
+        status = reg.get("status")
 
-            events = events_resp.json()
-            
-            event = events.get("data")
+        if not event_id:
+            continue
 
-            if event:
-                vol_events.append(event)
+        if status == "cancelled":
+            continue
+
+        events_resp = requests.get(f"{EVENT_URL}/event/{event_id}")
+        if events_resp.status_code != 200:
+            continue
+
+        event = events_resp.json().get("data")
+        if event:
+            event["registration_status"] = status
+            vol_events.append(event)
 
     return jsonify({
         "code": 200,

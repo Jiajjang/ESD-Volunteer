@@ -4,3 +4,8 @@
   themes: light --default, dark --prefersdark, emerald
 }
 
+@plugin "daisyui/theme" {
+  name: "emerald";
+  default: true;
+}
+
