@@ -4,8 +4,6 @@ from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
 import pytz, os
 from dotenv import load_dotenv
-import pika
-import json
 
 # Timezone
 sg_tz = pytz.timezone('Asia/Singapore')
