@@ -18,7 +18,7 @@ services:
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
-      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_HOST=active-white-bear-01.rmq6.cloudamqp.com
     restart: always
     depends_on:
       rabbitmq:
