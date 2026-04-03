@@ -9,9 +9,9 @@ BASE_URLS = {
     "waitlist": "http://localhost:5003"
 }
 
-EVENT_ID = 9  
-VOLUNTEER_TO_CANCEL = 2  # volunteer ID to cancel --> check if 23 (waitlisted) gets promoted as their registration is earliest
-TIMEOUT_TEST_VOLUNTEER = 33  # volunteer ID to simulate timeout
+EVENT_ID = 5
+VOLUNTEER_TO_CANCEL = 27 # volunteer ID to cancel --> check if 23 (waitlisted) gets promoted as their registration is earliest
+TIMEOUT_TEST_VOLUNTEER = 4 # volunteer ID to simulate timeout
 
 # ── UTILITY FUNCTIONS ─────────────────────────────────────────────────
 def pretty(resp):
