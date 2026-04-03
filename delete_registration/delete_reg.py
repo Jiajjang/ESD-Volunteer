@@ -26,7 +26,11 @@ def cancel_registration():
             "code": 400,
             "message": "volunteer_id and event_id are required"
         }), 400
-
+        
+    # Step 0: Check Registration Status
+    status_resp = requests.get(f"{REGISTRATION_URL}/registration/{event_id}/{volunteer_id}")
+    status_data = status_resp.json()
+    
     # Step 1: Cancel the confirmed registration (STEP 2. STEP 3,4 MISSING)
     cancel_resp = requests.put(
         f"{REGISTRATION_URL}/registration/status",
@@ -37,19 +41,37 @@ def cancel_registration():
             "expires_at": None
         }
     )
+    # Step 1.5: DECREMENT IF REGISTRATION TO BE DELETED IS NOT A WAITLISTED REGISTRATION
+    registrations = status_data.get("data", {}).get("Registrations", [])
+    decrement_success = True
 
-    if cancel_resp.status_code != 200: #WHAT TO DO AFTER THIS?
+    if registrations:
+        reg_status = registrations[0].get("status") 
+        print(f"DEBUG: Registration status is '{reg_status}'")
+        
+        if reg_status != 'waitlisted':
+            decrement_resp = requests.put(
+                f"{EVENT_URL}/event/{event_id}/capacity",
+                json={"action": "decrement"}
+            )
+            print(f"DEBUG: Decrement response: {decrement_resp.status_code}")
+            decrement_success = decrement_resp.status_code == 200
+        else:
+            print("DEBUG: Waitlisted registration, skipping decrement")
+    else:
+        print("DEBUG: No registration found, skipping decrement")
+
+    if cancel_resp.status_code != 200 or not decrement_success:
         return jsonify({
-            "code": cancel_resp.status_code,
+            "code": 500,
             "message": f"Failed to cancel registration: {cancel_resp.text}"
-        }), cancel_resp.status_code
+        }), 500
 
     cancelled_data = cancel_resp.json().get("data")
 
     # Step 2: Get next waitlisted volunteer
     waitlist_resp = requests.get(f"{WAITLIST_URL}/waitlist/{event_id}/next")
-
-    if waitlist_resp.status_code != 200: #WHAT TO DO AFTER THIS?
+    if waitlist_resp.status_code != 200:
         return jsonify({
             "code": 500,
             "message": "Cancelled volunteer, but failed to retrieve next waitlisted volunteer",
@@ -59,7 +81,7 @@ def cancel_registration():
         }), 500
 
     waitlist_json = waitlist_resp.json()
-
+    next_entry = waitlist_json.get("data")
     promoted_data = None
     promoted_volunteer_id = None
 
@@ -76,30 +98,62 @@ def cancel_registration():
 
     # If there is someone in waitlist
     next_entry = waitlist_json.get("data")
-    if next_entry:
-        promoted_volunteer_id = next_entry.get("volunteer_id")
-
-        promote_resp = requests.put(
-            f"{REGISTRATION_URL}/registration/status",
-            json={
-                "volunteer_id": promoted_volunteer_id,
-                "event_id": event_id,
-                "status": "pending",
-                "expires_at" : (datetime.now(sg_tz) + timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S') #need double check 
+    if not next_entry:
+        return jsonify({
+            "code": 200,
+            "message": f"Volunteer {volunteer_id} cancelled successfully. No waitlisted volunteer to promote.",
+            "data": {
+                "cancelledVolunteer": cancelled_data,
+                "promotedVolunteerID": None
             }
+        }), 200
+    
+    promoted_volunteer_id = next_entry.get("volunteer_id")
+    print("DEBUG promoted_volunteer_id:", promoted_volunteer_id)
+
+    promote_resp = requests.put(
+        f"{REGISTRATION_URL}/registration/status",
+        json={
+            "volunteer_id": promoted_volunteer_id,
+            "event_id": event_id,
+            "status": "pending",
+            "expires_at": (datetime.now(sg_tz) + timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
+        }
+    )
+
+    print("DEBUG promote status:", promote_resp.status_code)
+    print("DEBUG promote body:", promote_resp.text)
+
+    if promote_resp.status_code == 200:
+        promoted_data = promote_resp.json().get("data")
+
+        increment_resp = requests.put(
+            f"{EVENT_URL}/event/{event_id}/capacity",
+            json={"action": "increment"}
         )
 
-        if promote_resp.status_code == 200:
-            promoted_data = promote_resp.json().get("data")
-        else:
+        print("DEBUG increment status:", increment_resp.status_code)
+        print("DEBUG increment body:", increment_resp.text)
+
+        if not increment_resp.ok:
             return jsonify({
                 "code": 500,
-                "message": "Cancelled volunteer, but failed to promote next waitlisted volunteer",
+                "message": "Promoted volunteer, but failed to increment event capacity",
                 "data": {
                     "cancelledVolunteer": cancelled_data,
-                    "waitlistEntry": next_entry
+                    "promotedVolunteer": promoted_data
                 }
             }), 500
+    else:
+        return jsonify({
+            "code": 500,
+            "message": "Cancelled volunteer, but failed to promote next waitlisted volunteer",
+            "data": {
+                "cancelledVolunteer": cancelled_data,
+                "waitlistEntry": next_entry,
+                "promoteError": promote_resp.text
+            }
+        }), 500
 
     return jsonify({
         "code": 200,

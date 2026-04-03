@@ -15,7 +15,7 @@ export default {
             loading: true,
             error: null,
             registeredEvents: [],
-            volunteer_id: 1,
+            // volunteer_id: 1,
         }
     },
     computed: {
@@ -76,7 +76,7 @@ export default {
             this.loading = false
         }
         console.log(this.eventsWithRegistration)
-        console.log(this.registration)
+        // console.log(this.registration)
     },
 }
 </script>
