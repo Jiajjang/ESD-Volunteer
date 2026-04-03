@@ -32,6 +32,21 @@ services:
       - SUPABASE_KEY=${SUPABASE_KEY}
     restart: always
 
+  consumer_reg:
+    build: ./registration
+    command: python ./consumer_reg.py
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASS=${RABBITMQ_PASS}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_VHOST=${RABBITMQ_VHOST}
+    depends_on:
+      - rabbitmq
+    restart: always
+
   event:
     build: ./event
     ports:

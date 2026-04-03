@@ -20,6 +20,7 @@ export default {
             registrationSuccess: false,
             actionLoading: null,
             successMessage: '',
+            alertClass: 'alert-success',
         }
     },
 
@@ -45,7 +46,6 @@ export default {
             return useVolunteerStore().volunteerId
         },
 
-        // ✅ MOVED HERE - no more duplicate computed block
         currentRole() {
             return useSessionStore().currentRole
         },
@@ -123,8 +123,16 @@ export default {
                     `http://localhost:5012/get_event_by_volunteer/${this.volunteer_id}`,
                 )
                 if (!response.ok) throw new Error('API failed')
+
                 const data = await response.json()
-                this.registeredEvents = data.data.events || []
+                const events = data.data.events || []
+
+                this.registeredEvents = events.filter((reg) => {
+                    const status = (reg.registration_status || reg.status || '')
+                        .trim()
+                        .toLowerCase()
+                    return status !== 'cancelled'
+                })
             } catch (err) {
                 this.error = err.message
             } finally {
@@ -139,6 +147,7 @@ export default {
             this.actionLoading = 'register'
             this.registrationSuccess = false
             this.successMessage = ''
+            this.error = null
 
             try {
                 const response = await fetch('http://localhost:5010/register_for_event', {
@@ -153,15 +162,22 @@ export default {
                 const result = await response.json()
                 if (!response.ok) throw new Error(result.message || 'Registration failed')
 
-                this.registeredEvents = [
-                    ...this.registeredEvents,
-                    {
-                        event_id: this.currentEventId,
-                        registration_status: 'confirmed',
-                    },
-                ]
+                const actualStatus = result.data?.status
 
-                this.successMessage = `Successfully registered for ${this.event.name}!`
+                if (actualStatus !== 'confirmed' && actualStatus !== 'waitlisted') {
+                    throw new Error(`Unexpected registration status: ${actualStatus}`)
+                }
+
+                await this.fetchVolunteerEvents()
+
+                if (actualStatus === 'waitlisted') {
+                    this.successMessage = "Event full, you've been added to the waitlist"
+                    this.alertClass = 'alert-warning'
+                } else {
+                    this.successMessage = `Successfully registered for ${this.event.name}!`
+                    this.alertClass = 'alert-success'
+                }
+
                 this.registrationSuccess = true
 
                 setTimeout(() => {
@@ -216,7 +232,6 @@ export default {
     async mounted() {
         try {
             await Promise.all([this.fetchEvent(), this.fetchVolunteerEvents()])
-            console.log(this.currentRole)
         } catch (err) {
             this.error = err.message
         } finally {
@@ -261,7 +276,10 @@ export default {
                 <p class="text-lg">📍 {{ event.location }}</p>
 
                 <div class="card-actions justify-end mt-8">
-                    <div v-if="registrationSuccess" class="alert alert-success shadow-lg w-full">
+                    <div
+                        v-if="registrationSuccess"
+                        :class="['alert', alertClass, 'shadow-lg', 'w-full']"
+                    >
                         <span>{{ successMessage }}</span>
                     </div>
 
@@ -281,7 +299,7 @@ export default {
                         </button>
 
                         <button
-                            v-if="isCurrentEventRegistered"
+                            v-if="isCurrentEventRegistered && eventStatus !== 'waitlisted'"
                             class="w-full rounded-lg btn btn-error btn-outline py-2"
                             :disabled="loadingRegistration || actionLoading === 'delete'"
                             @click="deleteRegistration"
