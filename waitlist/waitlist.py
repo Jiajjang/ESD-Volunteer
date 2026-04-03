@@ -183,8 +183,8 @@ def start_amqp_consumer():
             conn    = get_rabbitmq_connection()
             channel = conn.channel()
             channel.exchange_declare(exchange=FANOUT_EXCHANGE, exchange_type='fanout', durable=True)
-            result     = channel.queue_declare(queue='', exclusive=True)
-            queue_name = result.method.queue
+            queue_name     = 'G2T7_fanout.waitlist.queue'
+            channel.queue_declare(queue=queue_name, durable=True)
             channel.queue_bind(exchange=FANOUT_EXCHANGE, queue=queue_name)
             channel.basic_qos(prefetch_count=1)
             channel.basic_consume(queue=queue_name, on_message_callback=handle_event_cancelled)

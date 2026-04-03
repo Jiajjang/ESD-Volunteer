@@ -56,6 +56,28 @@ def get_by_event(event_id):
         return jsonify({"code": 200, "data": {"Registrations": [format_registration(r) for r in registrations]}})
     return jsonify({"code": 400, "message": "Event not found"}), 400
 
+@app.route("/registration/<int:event_id>/emails")
+def get_emails_by_event(event_id):
+    response = (
+        supabase.table("registration")
+        .select("email")
+        .eq("event_id", event_id)
+        .execute()
+    )
+    emails = [row["email"] for row in (response.data or []) if row.get("email")]
+    if emails:
+        return jsonify({
+            "code": 200,
+            "data": {
+                "event_id": event_id,
+                "emails": emails
+            }
+        }), 200
+    return jsonify({
+        "code": 404,
+        "message": "No emails found for this event"
+    }), 404
+
 @app.route("/registration/<int:event_id>/<int:volunteer_id>")
 def get_by_event_and_volunteer(event_id, volunteer_id):
     registrations = getData({"event_id": event_id, "volunteer_id" : volunteer_id})
