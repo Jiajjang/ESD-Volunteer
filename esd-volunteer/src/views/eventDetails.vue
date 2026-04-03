@@ -1,5 +1,8 @@
 <script>
 import NavBar from '@/components/navbar.vue'
+import { useVolunteerStore } from '@/stores/volunteer'
+import { useOrganiserStore } from '@/stores/organiser'
+import { useSessionStore } from '@/stores/currentRole'
 
 export default {
     components: {
@@ -11,7 +14,7 @@ export default {
             event: null,
             loading: true,
             error: null,
-            volunteer_id: 1,
+            // volunteer_id: 1,
             registeredEvents: [],
             loadingRegistration: true,
             registrationSuccess: false,
@@ -27,7 +30,6 @@ export default {
 
         currentRegistration() {
             if (!this.currentEventId) return null
-
             return this.registeredEvents.find((reg) => reg.event_id === this.currentEventId) || null
         },
 
@@ -39,9 +41,33 @@ export default {
             )
         },
 
+        volunteer_id() {
+            return useVolunteerStore().volunteerId
+        },
+
+        // ✅ MOVED HERE - no more duplicate computed block
+        currentRole() {
+            return useSessionStore().currentRole
+        },
+
+        currentUserId() {
+            return this.currentRole === 'organiser'
+                ? useOrganiserStore().organiserId
+                : useVolunteerStore().volunteerId
+        },
+
+        isVolunteerView() {
+            return this.currentRole === 'volunteer'
+        },
+
+        isOrganiserView() {
+            return this.currentRole === 'organiser'
+        },
+
         statusBadgeClass() {
             if (this.eventStatus === 'confirmed') return 'badge badge-success'
             if (this.eventStatus === 'pending') return 'badge badge-warning'
+            if (this.eventStatus === 'waitlisted') return 'badge badge-error'
             return 'badge badge-neutral'
         },
 
@@ -51,7 +77,11 @@ export default {
         },
 
         isCurrentEventRegistered() {
-            return this.eventStatus === 'pending' || this.eventStatus === 'confirmed'
+            return (
+                this.eventStatus === 'pending' ||
+                this.eventStatus === 'confirmed' ||
+                this.eventStatus === 'waitlisted'
+            )
         },
 
         buttonLabel() {
@@ -82,18 +112,17 @@ export default {
         async fetchEvent() {
             const response = await fetch(`http://localhost:5001/event/${this.$route.params.id}`)
             if (!response.ok) throw new Error('API failed')
-
             const data = await response.json()
             this.event = data.data
         },
 
+        // ------------------- FETCH VOL EVENTS TO CHECK STATUS
         async fetchVolunteerEvents() {
             try {
                 const response = await fetch(
                     `http://localhost:5012/get_event_by_volunteer/${this.volunteer_id}`,
                 )
                 if (!response.ok) throw new Error('API failed')
-
                 const data = await response.json()
                 this.registeredEvents = data.data.events || []
             } catch (err) {
@@ -103,6 +132,7 @@ export default {
             }
         },
 
+        // ---------------------- ADD REGISTRATION
         async addRegistration() {
             if (this.isCurrentEventRegistered || !this.currentEventId) return
 
@@ -120,10 +150,16 @@ export default {
                     }),
                 })
 
-                if (!response.ok) throw new Error('Registration failed')
+                const result = await response.json()
+                if (!response.ok) throw new Error(result.message || 'Registration failed')
 
-                await response.json()
-                await this.fetchVolunteerEvents()
+                this.registeredEvents = [
+                    ...this.registeredEvents,
+                    {
+                        event_id: this.currentEventId,
+                        registration_status: 'confirmed',
+                    },
+                ]
 
                 this.successMessage = `Successfully registered for ${this.event.name}!`
                 this.registrationSuccess = true
@@ -139,14 +175,13 @@ export default {
                 this.actionLoading = null
             }
         },
-
+        // ---------------- DELETE REGISTRATION
         async deleteRegistration() {
             if (!this.isCurrentEventRegistered || !this.currentEventId) return
 
             this.actionLoading = 'delete'
             this.registrationSuccess = false
             this.successMessage = ''
-
             try {
                 const response = await fetch('http://localhost:5011/cancel-registration', {
                     method: 'POST',
@@ -181,6 +216,7 @@ export default {
     async mounted() {
         try {
             await Promise.all([this.fetchEvent(), this.fetchVolunteerEvents()])
+            console.log(this.currentRole)
         } catch (err) {
             this.error = err.message
         } finally {
@@ -192,10 +228,8 @@ export default {
 
 <template>
     <NavBar />
-    <main class="pt-10 p-0 max-w-3xl mx-auto">
-        <router-link :to="{ name: 'events' }" class="btn btn-ghost mb-8">
-            ← Back to Events
-        </router-link>
+    <main class="pt-8 p-0 max-w-3xl mx-auto">
+        <button @click="$router.back()" class="btn btn-ghost mb-8">← Back</button>
 
         <div v-if="loading">Loading...</div>
 
@@ -205,16 +239,22 @@ export default {
             </figure>
 
             <div class="card-body">
-                <div class="gap-2 flex flex-row justify-between">
+                <div class="gap-2 flex flex-row justify-between items-center">
                     <h1 class="text-4xl font-black">{{ event.name }}</h1>
 
                     <div
-                        v-if="eventStatus === 'pending' || eventStatus === 'confirmed'"
+                        v-if="
+                            isVolunteerView &&
+                            (eventStatus === 'pending' ||
+                                eventStatus === 'confirmed' ||
+                                eventStatus === 'waitlisted')
+                        "
                         :class="statusBadgeClass"
                     >
                         {{ formattedStatus }}
                     </div>
                 </div>
+
                 <p class="text-lg">{{ event.description }}</p>
 
                 <p class="text-lg mt-5">🕒 {{ formatDate(event.start_date) }}</p>
@@ -225,27 +265,54 @@ export default {
                         <span>{{ successMessage }}</span>
                     </div>
 
-                    <button
-                        class="w-full rounded-lg btn"
-                        :class="buttonClass"
-                        :disabled="
-                            loadingRegistration ||
-                            actionLoading === 'register' ||
-                            isCurrentEventRegistered
-                        "
-                        @click="addRegistration"
-                    >
-                        {{ buttonLabel }}
-                    </button>
+                    <!-- Volunteer actions -->
+                    <template v-if="isVolunteerView">
+                        <button
+                            class="w-full rounded-lg btn"
+                            :class="buttonClass"
+                            :disabled="
+                                loadingRegistration ||
+                                actionLoading === 'register' ||
+                                isCurrentEventRegistered
+                            "
+                            @click="addRegistration"
+                        >
+                            {{ buttonLabel }}
+                        </button>
 
-                    <button
-                        v-if="isCurrentEventRegistered"
-                        class="w-full rounded-lg btn btn-error btn-outline py-2"
-                        :disabled="loadingRegistration || actionLoading === 'delete'"
-                        @click="deleteRegistration"
-                    >
-                        {{ actionLoading === 'delete' ? 'Unregistering...' : 'Unregister' }}
-                    </button>
+                        <button
+                            v-if="isCurrentEventRegistered"
+                            class="w-full rounded-lg btn btn-error btn-outline py-2"
+                            :disabled="loadingRegistration || actionLoading === 'delete'"
+                            @click="deleteRegistration"
+                        >
+                            {{ actionLoading === 'delete' ? 'Unregistering...' : 'Unregister' }}
+                        </button>
+                    </template>
+
+                    <!-- Organiser actions -->
+                    <template v-else>
+                        <div class="flex flex-row flex-wrap w-full gap-4">
+                            <button
+                                class="w-full rounded-lg btn btn-outline btn-info flex-1/3 grow"
+                                @click="editEvent"
+                            >
+                                Edit Event
+                            </button>
+                            <button
+                                class="w-full rounded-lg btn btn-outline flex-1/3 grow"
+                                @click="viewRegistrations"
+                            >
+                                View Registrations
+                            </button>
+                            <button
+                                class="w-full rounded-lg btn btn-error btn-outline"
+                                @click="deleteEvent"
+                            >
+                                Delete Event
+                            </button>
+                        </div>
+                    </template>
                 </div>
             </div>
         </div>

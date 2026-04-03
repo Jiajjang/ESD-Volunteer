@@ -1,6 +1,7 @@
 <script>
 import EventsCard from '@/components/eventsCard.vue'
 import NavBar from '@/components/navbar.vue'
+import { useVolunteerStore } from '@/stores/volunteer'
 
 export default {
     components: {
@@ -31,17 +32,27 @@ export default {
                 }
             })
         },
+
+        volunteer_id() {
+            return useVolunteerStore().volunteerId
+        },
     },
 
     methods: {
+        // FETCH ALL EVENTS THATS NOT CANCELLED
         async fetchEvents() {
-            const response = await fetch('http://localhost:5001/event')
-            if (!response.ok) throw new Error('API failed')
+            try {
+                const response = await fetch('http://localhost:5001/event')
+                if (!response.ok) throw new Error('API failed')
 
-            const data = await response.json()
-            this.events = data.data
-            this.events.filter(event => 
-            event.status !== 'cancelled')
+                const data = await response.json()
+
+                this.events = data.data
+                    .filter((event) => event.status !== 'cancelled')
+                    .sort((a, b) => new Date(a.event_date) - new Date(b.event_date))
+            } catch (err) {
+                console.error(err)
+            }
         },
 
         async fetchVolunteerEvents() {

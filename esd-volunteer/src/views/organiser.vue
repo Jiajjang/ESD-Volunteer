@@ -1,7 +1,8 @@
 <script>
 import EventsCard from '@/components/eventsCard.vue'
 import NavBar from '@/components/navbar.vue'
-import { useVolunteerStore } from '@/stores/volunteer'
+import { useOrganiserStore } from '@/stores/organiser'
+import { useSessionStore } from '@/stores/currentRole'
 
 export default {
     components: {
@@ -12,62 +13,67 @@ export default {
     data() {
         return {
             events: [],
-            // registeredEvents: [],
             loading: true,
             error: null,
-            volunteer: null,
-            // volunteer_id: 1,
+            organiser: null,
         }
     },
 
     computed: {
-        volunteerName() {
-            return this.volunteer ? this.volunteer.volunteer_name : ''
+        organiserName() {
+            return this.organiser ? this.organiser.organiser_name : ''
         },
-        volunteer_id() {
-            return useVolunteerStore().volunteerId
+        organiser_id() {
+            return useOrganiserStore().organiserId
         },
     },
 
     methods: {
-        async fetchVolunteer() {
+        async fetchOrganiser() {
             try {
-                const response = await fetch(`http://localhost:5002/volunteer/${this.volunteer_id}`)
-                if (!response.ok) throw new Error('API failed')
+                const response = await fetch(`http://localhost:5004/organiser/${this.organiser_id}`)
+                if (!response.ok) throw new Error('Failed to fetch organiser')
 
                 const data = await response.json()
-                console.log('Raw API data:', data.data)
-                this.volunteer = data.data
+                this.organiser = data.data
             } catch (err) {
                 console.error('API Error:', err)
                 this.error = err.message
-            } finally {
-                this.loading = false
             }
         },
 
-        async fetchVolunteerEvents() {
+        async fetchOrganiserEvents() {
             try {
                 const response = await fetch(
-                    `http://localhost:5012/get_event_by_volunteer/${this.volunteer_id}`,
+                    `http://localhost:5001/event/organiser/${this.organiser_id}`
                 )
-                if (!response.ok) throw new Error('API failed')
+
+                if (response.status === 404) {
+                    this.events = []
+                    return
+                }
+
+                if (!response.ok) throw new Error('Failed to fetch events')
 
                 const data = await response.json()
-                console.log('Raw API data:', data.data.events)
-                this.events = data.data.events
+                this.events = data.data?.events || data.data || []
             } catch (err) {
                 console.error('API Error:', err)
                 this.error = err.message
-            } finally {
-                this.loading = false
+                this.events = []
             }
         },
     },
 
-    mounted() {
-        this.fetchVolunteer()
-        this.fetchVolunteerEvents()
+    async mounted() {
+        const sessionStore = useSessionStore()
+        sessionStore.setRole('organiser')
+
+        try {
+            await Promise.all([this.fetchOrganiser(), this.fetchOrganiserEvents()])
+        } finally {
+            this.loading = false
+        }
     },
 }
 </script>
@@ -86,18 +92,18 @@ export default {
                     >
                         <div class="avatar placeholder mb-4">
                             <div
-                                class="bg-emerald-100 text-emerald-700 rounded-full w-20 h-20 flex items-center justify-center"
+                                class="bg-cyan-100 text-cyan-700 rounded-full w-20 h-20 flex items-center justify-center"
                             >
                                 <span class="text-2xl font-bold leading-none">
-                                    {{ volunteer?.volunteer_name?.charAt(0) || 'V' }}
+                                    {{ organiser?.organiser_name?.charAt(0) || 'V' }}
                                 </span>
                             </div>
                         </div>
 
-                        <h2 v-if="volunteer" class="text-2xl font-bold text-base-content">
-                            {{ volunteer.volunteer_name }}
+                        <h2 v-if="organiser" class="text-2xl font-bold text-base-content">
+                            {{ organiser.organiser_name }}
                         </h2>
-                        <p class="text-sm text-base-content/60 mt-1">Volunteer Profile</p>
+                        <p class="text-sm text-base-content/60 mt-1">Organiser Profile</p>
                     </div>
 
                     <div class="mt-6 space-y-5">
@@ -107,8 +113,8 @@ export default {
                             >
                                 Email
                             </p>
-                            <p v-if="volunteer" class="mt-1 text-sm text-base-content">
-                                {{ volunteer.email }}
+                            <p v-if="organiser" class="mt-1 text-sm text-base-content">
+                                {{ organiser.email }}
                             </p>
                         </div>
 
@@ -118,8 +124,18 @@ export default {
                             >
                                 Contact
                             </p>
-                            <p v-if="volunteer" class="mt-1 text-sm text-base-content">
-                                {{ volunteer.phone_number }}
+                            <p v-if="organiser" class="mt-1 text-sm text-base-content">
+                                {{ organiser.phone_number }}
+                            </p>
+                        </div>
+                        <div>
+                            <p
+                                class="text-xs font-semibold uppercase tracking-wide text-base-content/50"
+                            >
+                                Address
+                            </p>
+                            <p v-if="organiser" class="mt-1 text-sm text-base-content">
+                                {{ organiser.registered_address }}
                             </p>
                         </div>
                     </div>
@@ -132,13 +148,13 @@ export default {
                         <div>
                             <h1 class="text-3xl font-bold text-base-content">My Events</h1>
                             <p class="mt-1 text-sm text-base-content/60">
-                                View the events you’ve registered for.
+                                View the events you’ve created.
                             </p>
                         </div>
                     </div>
 
                     <div v-if="loading" class="flex h-40 items-center justify-center">
-                        <span class="loading loading-spinner loading-lg text-emerald-600"></span>
+                        <span class="loading loading-spinner loading-lg text-cyan-600"></span>
                     </div>
 
                     <div v-else-if="error" class="alert alert-error shadow-sm">
@@ -163,7 +179,9 @@ export default {
                         v-else
                         class="flex h-40 items-center justify-center rounded-2xl border border-dashed border-base-300 bg-base-100"
                     >
-                        <p class="text-base-content/60">No events found.</p>
+                        <p class="text-base-content/60">
+                            No events found. Create your first event to get started.
+                        </p>
                     </div>
                 </div>
             </section>

@@ -74,6 +74,33 @@ def get_by_id(event_id):
     except Exception as e:
         return jsonify({"code": 500, "message": str(e)}), 500
 
+
+# Get Event by OrganiserId
+@app.route("/event/organiser/<int:organiser_id>", methods=['GET'])
+def get_by_organiser(organiser_id):
+    try:
+        response = (
+            supabase.table('event').select('*').eq('organiser_id', organiser_id).execute()
+        )
+
+        if response.data:
+            return jsonify({
+                "code": 200,
+                "data": response.data
+            }), 200
+
+        return jsonify({
+            "code": 404,
+            "message": "No events found for this organiser",
+            "data": []
+        }), 404
+
+    except Exception as e:
+        return jsonify({
+            "code": 500,
+            "message": str(e)
+        }), 500
+
 #Scenario 1 and 2 Update Capacity
 @app.route("/event/<int:event_id>/capacity", methods=['PUT'])
 def update_capacity(event_id):

@@ -22,7 +22,8 @@ export default {
     computed: {
         statusBadgeClass() {
             if (this.eventStatus === 'confirmed') return 'badge badge-success'
-            if (this.eventStatus === 'pending') return 'badge badge-warning'
+            if (this.eventStatus === 'pending')  return 'badge badge-warning'
+            if (this.eventStatus === 'waitlisted')  return 'badge badge-error'
             return 'badge badge-neutral'
         },
         formattedStatus() {
@@ -59,7 +60,7 @@ export default {
                 <h2 class="card-title text-xl flex-1">{{ event.name }}</h2>
 
                 <div
-                    v-if="eventStatus && (eventStatus === 'pending' || eventStatus === 'confirmed')"
+                    v-if="eventStatus && (eventStatus === 'pending' || eventStatus === 'confirmed' || eventStatus === 'waitlisted')"
                     :class="statusBadgeClass"
                 >
                     {{ formattedStatus }}
