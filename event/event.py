@@ -22,7 +22,7 @@ RABBITMQ_PASS = os.environ.get('RABBITMQ_PASS', 'guest')
 FANOUT_EXCHANGE = os.environ.get('FANOUT_EXCHANGE', 'G2T7_fanout.exchange')
 
 #Helper function for RabbitMQ --------------------
-def publish_event_cancelled(event_id):
+def publish_event_cancelled(event_id, event_name, start_date, end_date):
     try:
         credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
         parameters = pika.ConnectionParameters(host=RABBITMQ_HOST, port=RABBITMQ_PORT, credentials=credentials)
@@ -33,7 +33,7 @@ def publish_event_cancelled(event_id):
         channel.exchange_declare(exchange=FANOUT_EXCHANGE, exchange_type='fanout', durable=True)
 
         #create the message
-        message = json.dumps({"event_id": event_id, "status": "cancelled"})
+        message = json.dumps({"event_id": event_id, "event_name" : event_name, "start_date": start_date, "end_date": end_date})
 
         #publish
         channel.basic_publish(exchange=FANOUT_EXCHANGE, routing_key='', body=message)
@@ -110,7 +110,7 @@ def update_capacity(event_id):
         update_res = supabase.table('event').update({"current_capacity": curr}).eq('event_id', event_id).execute()
         return jsonify({
             "code": 200, 
-            "eventID": event_id, 
+            "event_id": event_id, 
             "capacity": curr})
     except Exception as e:
         return jsonify({
@@ -130,20 +130,28 @@ def delete_event(event_id):
         response = supabase.table('event').update({
             "status": "cancelled",
             "reason": reason
-        }).eq('event_id', event_id).execute()
+        }).eq('event_id', event_id).select("event_id, event_name, start_date, end_date").execute()
 
         if not response.data:
             return jsonify({
                 "code": 404, 
                 "message": "Event not found"
             }), 404
-
+        
+        event_row = response.data[0]
+        event_name = event_row.get("event_name")
+        start_date = event_row.get("start_date")
+        end_date = event_row.get("end_date")
+        
         # Publish to RabbitMQ (The Fanout Exchange)
-        publish_event_cancelled(event_id)
+        publish_event_cancelled(event_id, event_name, start_date, end_date)
 
         return jsonify({
             "code": 200,
-            "eventID": event_id,
+            "event_id": event_id,
+            "event_name": event_name,
+            "start_date": start_date,
+            "end_date": end_date,
             "status": "cancelled",
             "reason": reason
         })
