@@ -1,83 +1,114 @@
+# test_delete_registration.py
 import requests
-import json
-from datetime import datetime, timedelta
-import pytz
-sg_tz = pytz.timezone('Asia/Singapore')
+import time
 
-# ── CONFIG ──────────────────────────────────────────────
-EVENT_ID = 3
-CONFIRMED_VOLUNTEER_ID = 14  # volunteer to cancel
-REGISTRATION_URL = "http://localhost:5000"          # Registration Service
-WAITLIST_URL = "http://localhost:5003" #waitlist service
-COMPOSITE_URL = "http://localhost:5011"             # Composite Service
+# ── CONFIG ─────────────────────────────────────────────────────────────
+BASE_URLS = {
+    "registration": "http://localhost:5000",
+    "delete_registration": "http://localhost:5011",
+    "waitlist": "http://localhost:5003"
+}
 
-# ── HELPER FUNCTION TO FETCH REGISTRATIONS ─────────────
-def fetch_registrations(event_id):
+EVENT_ID = 9  
+VOLUNTEER_TO_CANCEL = 2  # volunteer ID to cancel --> check if 23 (waitlisted) gets promoted as their registration is earliest
+TIMEOUT_TEST_VOLUNTEER = 33  # volunteer ID to simulate timeout
+
+# ── UTILITY FUNCTIONS ─────────────────────────────────────────────────
+def pretty(resp):
+    print(resp.status_code)
+    print(resp.json())
+
+def list_registrations():
+    resp = requests.get(f"{BASE_URLS['registration']}/registration")
     try:
-        res = requests.get(f"{REGISTRATION_URL}/registration/{event_id}")
-        if res.status_code == 200:
-            return res.json()["data"]["Registrations"]
-        else:
-            print(f"Failed to fetch registrations: {res.status_code} - {res.text}")
-            return []
-    except Exception as e:
-        print(f"Error fetching registrations: {e}")
+        data = resp.json()
+    except ValueError:
+        print("Error: registration service returned non-JSON")
         return []
+    return data.get("data", {}).get("Registrations", [])
 
-# ── FETCH CURRENT REGISTRATIONS ───────────────────────
-registrations = fetch_registrations(EVENT_ID)
-print(f"Current registrations for event {EVENT_ID}:")
-for r in registrations:
-    print(f"{r['volunteer_id']} - {r['email']} - {r['status']} - expires_at={r.get('expires_at')}")
+def list_waitlist(event_id):
+    resp = requests.get(f"{BASE_URLS['waitlist']}/waitlist/{event_id}")
+    return resp.json().get("data", [])
 
-# ── CANCEL CONFIRMED VOLUNTEER VIA COMPOSITE ──────────
-print(f"\nCancelling confirmed volunteer: {CONFIRMED_VOLUNTEER_ID}")
-try:
-    request_time = datetime.now(sg_tz)
-    cancel_resp = requests.post(
-        f"{COMPOSITE_URL}/cancel-registration",
-        json={
-            "volunteer_id": CONFIRMED_VOLUNTEER_ID,
-            "event_id": EVENT_ID,
-            "timeSlot": ""  # optional for now
-        }
-    )
-    response_time = datetime.now(sg_tz)
-    cancel_data = cancel_resp.json()
-    print("\nComposite cancel response:")
-    print(json.dumps(cancel_data, indent=2))
-except Exception as e:
-    print(f"Failed to cancel volunteer: {e}")
+def pretty(resp):
+    print(resp.status_code)
+    try:
+        print(resp.json())
+    except ValueError:
+        print(resp.text)  # safely print non-JSON responses
+        
+# ── 1. List registrations before cancel ───────────────────────────────
+print("Registrations BEFORE cancel:")
+regs = list_registrations()
+print("DEBUG: regs type =", type(regs))  # should be <class 'list'>
+if regs:
+    print("DEBUG: first reg =", regs[0])
+reg_to_cancel = next((r for r in regs if r["volunteer_id"] == VOLUNTEER_TO_CANCEL), None)
 
-# ── FETCH UPDATED REGISTRATIONS ───────────────────────
-updated_registrations = fetch_registrations(EVENT_ID)
-print("\nUpdated registrations after cancellation and promotion:")
-for r in updated_registrations:
-    print(f"{r['volunteer_id']} - {r['email']} - {r['status']} - expires_at={r.get('expires_at')}")
 
-# ── SHOW PROMOTED VOLUNTEER IF ANY ────────────────────
-promoted_id = cancel_data.get("data", {}).get("promotedVolunteerID")
+# Find registration ID to cancel for VOLUNTEER_TO_CANCEL
+reg_to_cancel = next(
+    (r for r in regs if r["volunteer_id"] == VOLUNTEER_TO_CANCEL), None
+)
+if not reg_to_cancel:
+    raise Exception(f"No registration found for volunteer {VOLUNTEER_TO_CANCEL}")
+
+
+# Use 'registration_id' from the API, not 'id'
+registration_id = reg_to_cancel["registration_id"]
+
+# ── 2. Cancel registration ────────────────────────────────────────────
+cancel_payload = {
+    "volunteer_id": VOLUNTEER_TO_CANCEL,
+    "event_id": EVENT_ID,
+    "registration_id": registration_id
+}
+print("\nCancelling registration...")
+cancel_resp = requests.post(f"{BASE_URLS['delete_registration']}/cancel-registration", json=cancel_payload)
+pretty(cancel_resp)
+
+# ── 3. List registrations AFTER cancel ────────────────────────────────
+print("\nRegistrations AFTER cancel:")
+regs = list_registrations()
+for r in regs:
+    print(r)
+
+# ── 4. Check waitlist and promotion ──────────────────────────────────
+print("\nWaitlist for event after cancel:")
+waitlist = list_waitlist(EVENT_ID)
+for w in waitlist:
+    print(w)
+
+# Extract promoted volunteer ID
+promoted_id = cancel_resp.json().get("data", {}).get("promotedVolunteerID")
 if promoted_id:
     print(f"\nPromoted volunteer ID: {promoted_id}")
-    promoted = cancel_data.get("data", {}).get("promotedVolunteer", {})
-    expires_at = promoted.get("expires_at")
 
-    print("expires_at returned:", expires_at)
-
-    if expires_at:
-        parsed = sg_tz.localize(datetime.strptime(expires_at, "%Y-%m-%dT%H:%M:%S"))
-        print("parsed expires_at:", parsed)
-
-        lower_bound = request_time + timedelta(hours=23, minutes=59)
-        upper_bound = response_time + timedelta(hours=24, minutes=1)
-
-        if lower_bound <= parsed <= upper_bound:
-            print("PASS: expires_at is about 24 hours from now")
-        else:
-            print("FAIL: expires_at is not about 24 hours from now")
-
-        print("time remaining:", parsed - response_time)
-    else:
-        print("No expires_at returned for promoted volunteer")
+    # ── 5. Respond to promotion ──────────────────────────────────────
+if promoted_id:
+    respond_payload = {
+        "volunteer_id": promoted_id,
+        "event_id": EVENT_ID,
+        "status": "confirmed"
+    }
+    print("\nResponding to promotion (confirming)...")
+    url = f"{BASE_URLS['delete_registration']}/cancel-registration/respond"
+    print("DEBUG URL:", url)
+    print("DEBUG Payload:", respond_payload)
+    resp_resp = requests.put(url, json=respond_payload)
+    pretty(resp_resp)
 else:
-    print("\nNo volunteer was promoted.")
+    print("No one promoted from waitlist (queue empty)")
+
+
+# ── 6. Simulate a timeout (optional) ────────────────────────────────
+print("\nSimulating timeout for volunteer_id:", TIMEOUT_TEST_VOLUNTEER)
+timeout_payload = {
+    "volunteer_id": TIMEOUT_TEST_VOLUNTEER,
+    "event_id": EVENT_ID
+}
+timeout_resp = requests.put(f"{BASE_URLS['delete_registration']}/cancel-registration/timeout", json=timeout_payload)
+pretty(timeout_resp)
+
+print("\nTest completed.")
