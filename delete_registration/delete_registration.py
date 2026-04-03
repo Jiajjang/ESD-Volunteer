@@ -1,270 +1,169 @@
 from flask import Flask, request, jsonify
-import requests, os, json, pika, logging
+import requests, os
+from flask_cors import CORS
 from datetime import datetime, timedelta
 import pytz
-from dotenv import load_dotenv
 
-load_dotenv()
+
+# Timezone
 sg_tz = pytz.timezone('Asia/Singapore')
 
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+CORS(app)
 
-# ── Service URLs ──────────────────────────────────────────────────────────────
-REGISTRATION_URL = os.getenv("REGISTRATION_SERVICE_URL", "http://localhost:5000")
-WAITLIST_URL     = os.getenv("WAITLIST_SERVICE_URL",     "http://localhost:5003")
-EVENT_URL        = os.getenv("EVENT_SERVICE_URL",        "http://localhost:5001")
+REGISTRATION_URL = os.getenv("REGISTRATION_SERVICE_URL", "http://registration:5000")
+WAITLIST_URL = os.getenv("WAITLIST_SERVICE_URL", "http://waitlist:5003")
+EVENT_URL = os.getenv("EVENT_SERVICE_URL", "http://event:5001")
 
-# ── RabbitMQ ──────────────────────────────────────────────────────────────────
-RABBITMQ_HOST  = os.getenv("RABBITMQ_HOST",  "active-white-bear-01.rmq6.cloudamqp.com")
-RABBITMQ_PORT  = int(os.getenv("RABBITMQ_PORT", 5672))
-RABBITMQ_USER  = os.getenv("RABBITMQ_USER",  "ntxsydfp")
-RABBITMQ_PASS  = os.getenv("RABBITMQ_PASS",  "VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9")
-RABBITMQ_VHOST = os.getenv("RABBITMQ_VHOST", "ntxsydfp")
-TOPIC_EXCHANGE = os.getenv("TOPIC_EXCHANGE", "G2T7_topic.exchange")
-
-
-def publish_message(routing_key: str, message: dict):
-    """Fire-and-forget publish to G2T7_topic.exchange → Notification Service."""
-    try:
-        credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
-        parameters  = pika.ConnectionParameters(
-            host=RABBITMQ_HOST, port=RABBITMQ_PORT,
-            virtual_host=RABBITMQ_VHOST,
-            credentials=credentials, heartbeat=600,
-            blocked_connection_timeout=300
-        )
-        conn    = pika.BlockingConnection(parameters)
-        channel = conn.channel()
-        channel.exchange_declare(
-            exchange=TOPIC_EXCHANGE, exchange_type='topic', durable=True
-        )
-        channel.basic_publish(
-            exchange=TOPIC_EXCHANGE,
-            routing_key=routing_key,
-            body=json.dumps(message),
-            properties=pika.BasicProperties(
-                content_type='application/json', delivery_mode=2
-            )
-        )
-        conn.close()
-        logger.info(f'[AMQP] Published → {routing_key}: {message}')
-    except Exception as e:
-        logger.error(f'[AMQP] Publish failed for {routing_key}: {e}')
-
-
-def get_event_details(event_id: int) -> dict:
-    """Fetch event details from Event Service."""
-    try:
-        resp = requests.get(f"{EVENT_URL}/event/{event_id}")
-        if resp.status_code == 200:
-            d = resp.json().get("data", {})
-            return {
-                "event_name": d.get("name", ""),
-                "start_date": d.get("startDate", d.get("start_date", "")),
-                "end_date":   d.get("endDate",   d.get("end_date", "")),
-                "location":   d.get("location", "")
-            }
-    except Exception as e:
-        logger.warning(f'[Event] Could not fetch event details: {e}')
-    return {"event_name": "", "start_date": "", "end_date": "", "location": ""}
-
-
-# ── POST /cancel-registration ─────────────────────────────────────────────────
 @app.route("/cancel-registration", methods=["POST"])
 def cancel_registration():
-    """
-    Body: { "volunteer_id": 42, "event_id": 3, "registration_id": 5 }
-    Cancels a registration and promotes next waitlisted volunteer if any.
-    """
-    data = request.get_json()
-    volunteer_id = data.get("volunteer_id")
-    event_id = data.get("event_id")
-    registration_id = data.get("registration_id")
-
-    if not volunteer_id or not event_id or not registration_id:
-        return jsonify({"code": 400, "message": "volunteer_id, event_id, registration_id required"}), 400
-
-    # ── Fetch event details
-    event_details = get_event_details(event_id)
-
-    # ── Cancel registration
-    logger.info(f'[Step 2] Deleting registration_id={registration_id}')
-    cancel_resp = requests.delete(f"{REGISTRATION_URL}/registration/{registration_id}")
-    if cancel_resp.status_code not in (200, 204):
-        return jsonify({"code": cancel_resp.status_code, "message": f"Failed to cancel registration: {cancel_resp.text}"}), cancel_resp.status_code
-
-    cancelled_data = cancel_resp.json().get("data", {})
-    email = cancelled_data.get("email", "")
-
-    # ── Notify cancellation
-    publish_message("registration.cancelled", {
-        "event_id": event_id,
-        "event_name": event_details["event_name"],
-        "start_date": event_details["start_date"],
-        "end_date": event_details["end_date"],
-        "location": event_details["location"],
-        "status": "cancelled",
-        "email": email
-    })
-
-    # ── Get next waitlisted volunteer
-    waitlist_resp = requests.get(f"{WAITLIST_URL}/waitlist/{event_id}/next")
-    next_entry = waitlist_resp.json().get("data") if waitlist_resp.status_code == 200 else None
-    promoted_volunteer_id = next_entry.get("volunteer_id") if next_entry else None
-
-    # ── If no one in waitlist → decrement capacity
-    if not promoted_volunteer_id:
-        logger.info(f'[Step 7L] Queue empty — decrementing capacity for event_id={event_id}')
-        capacity_data = {}
-        try:
-            capacity_resp = requests.put(f"{EVENT_URL}/event/capacity", json={"event_id": event_id, "action": "decrement"})
-            capacity_data = capacity_resp.json().get("data", {})
-        except Exception as e:
-            logger.warning(f'[Step 7L] Event Service error (non-fatal): {e}')
-
-        return jsonify({
-            "code": 200,
-            "message": "Cancelled. No one in waitlist. Capacity decremented.",
-            "data": {"cancelledVolunteer": cancelled_data, "promotedVolunteerID": None, "capacity": capacity_data}
-        }), 200
-
-    # ── Promote waitlisted volunteer → pending
-    expires_at = (datetime.now(sg_tz) + timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S%z')
-    logger.info(f'[Step 7] Promoting volunteer_id={promoted_volunteer_id} to PENDING until {expires_at}')
-    promote_resp = requests.put(f"{REGISTRATION_URL}/registration/status", json={
-        "volunteer_id": promoted_volunteer_id,
-        "event_id": event_id,
-        "status": "pending",
-        "expires_at": expires_at
-    })
-
-    if promote_resp.status_code != 200:
-        return jsonify({
-            "code": 500,
-            "message": "Cancelled volunteer but failed to promote next in waitlist",
-            "data": {"cancelledVolunteer": cancelled_data, "waitlistEntry": next_entry}
-        }), 500
-
-    promoted_data = promote_resp.json().get("data", {})
-    promoted_email = promoted_data.get("email", "")
-
-    # ── Notify promotion
-    publish_message("registration.pending", {
-        "event_id": event_id,
-        "event_name": event_details["event_name"],
-        "start_date": event_details["start_date"],
-        "end_date": event_details["end_date"],
-        "location": event_details["location"],
-        "status": "pending",
-        "email": promoted_email,
-        "expires_at": expires_at
-    })
-
-    return jsonify({
-        "code": 200,
-        "message": f"Volunteer {volunteer_id} cancelled. Volunteer {promoted_volunteer_id} promoted to PENDING.",
-        "data": {
-            "cancelledVolunteer": cancelled_data,
-            "promotedVolunteerID": promoted_volunteer_id,
-            "promotedVolunteer": promoted_data,
-            "expires_at": expires_at
-        }
-    }), 200
-
-
-# ── PUT /cancel-registration/respond ─────────────────────────────────────────
-@app.route("/cancel-registration/respond", methods=["PUT"])
-def respond_to_promotion():
-    """
-    Body: { "volunteer_id": 99, "event_id": 3, "status": "confirmed" | "rejected" }
-    Updates pending registration after volunteer responds.
-    """
-    data = request.get_json()
-    volunteer_id = data.get("volunteer_id")
-    event_id = data.get("event_id")
-    status = data.get("status", "").lower()
-
-    if not volunteer_id or not event_id or status not in ("confirmed", "rejected"):
-        return jsonify({"code": 400, "message": "Invalid volunteer_id, event_id, or status"}), 400
-
-    event_details = get_event_details(event_id)
-
-    update_resp = requests.put(f"{REGISTRATION_URL}/registration/status", json={
-        "volunteer_id": volunteer_id,
-        "event_id": event_id,
-        "status": status
-    })
-
-    if update_resp.status_code != 200:
-        return jsonify({"code": 500, "message": "Failed to update registration status"}), 500
-
-    email = update_resp.json().get("data", {}).get("email", "")
-
-    publish_message(f"registration.{status}", {
-        "event_id": event_id,
-        "event_name": event_details["event_name"],
-        "start_date": event_details["start_date"],
-        "end_date": event_details["end_date"],
-        "location": event_details["location"],
-        "status": status,
-        "email": email
-    })
-
-    return jsonify({"code": 200, "message": f"Registration {status}"}), 200
-
-
-### TO FIX!!! ###
-''' THIS PART IM REALLY NOT SURE, I KEEP GETTING AN ERROR WHEN THIS PART OF THE TEST SCRIPT RUNS BUT NGL IDK IF I'M EVEN DOING IT RIGHT '''
-
-# ── PUT /cancel-registration/timeout ─────────────────────────────────────────
-@app.route("/cancel-registration/timeout", methods=["PUT"])
-def handle_timeout():
-    """
-    Body: { "volunteer_id": 99, "event_id": 3 }
-    Auto-cancels pending registrations after timeout.
-    """
     data = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id = data.get("event_id")
 
     if not volunteer_id or not event_id:
-        return jsonify({"code": 400, "message": "volunteer_id and event_id required"}), 400
+        return jsonify({
+            "code": 400,
+            "message": "volunteer_id and event_id are required"
+        }), 400
+        
+    # Step 0: Check Registration Status
+    status_resp = requests.get(f"{REGISTRATION_URL}/registration/{event_id}/{volunteer_id}")
+    status_data = status_resp.json()
+    
+    # Step 1: Cancel the confirmed registration (STEP 2. STEP 3,4 MISSING)
+    cancel_resp = requests.put(
+        f"{REGISTRATION_URL}/registration/status",
+        json={
+            "volunteer_id": volunteer_id,
+            "event_id": event_id,
+            "status": "cancelled",
+            "expires_at": None
+        }
+    )
+    # Step 1.5: DECREMENT IF REGISTRATION TO BE DELETED IS NOT A WAITLISTED REGISTRATION
+    registrations = status_data.get("data", {}).get("Registrations", [])
+    decrement_success = True
 
-    event_details = get_event_details(event_id)
+    if registrations:
+        reg_status = registrations[0].get("status") 
+        print(f"DEBUG: Registration status is '{reg_status}'")
+        
+        if reg_status != 'waitlisted':
+            decrement_resp = requests.put(
+                f"{EVENT_URL}/event/{event_id}/capacity",
+                json={"action": "decrement"}
+            )
+            print(f"DEBUG: Decrement response: {decrement_resp.status_code}")
+            decrement_success = decrement_resp.status_code == 200
+        else:
+            print("DEBUG: Waitlisted registration, skipping decrement")
+    else:
+        print("DEBUG: No registration found, skipping decrement")
 
-    # Auto-cancel
-    check = requests.put(f"{REGISTRATION_URL}/registration/status", json={
-        "volunteer_id": volunteer_id,
-        "event_id": event_id,
-        "status": "cancelled"
-    })
+    if cancel_resp.status_code != 200 or not decrement_success:
+        return jsonify({
+            "code": 500,
+            "message": f"Failed to cancel registration: {cancel_resp.text}"
+        }), 500
 
-    if check.status_code != 200:
-        return jsonify({"code": 500, "message": "Failed to auto-cancel timed-out registration"}), 500
+    cancelled_data = cancel_resp.json().get("data")
 
-    email = check.json().get("data", {}).get("email", "")
+    # Step 2: Get next waitlisted volunteer
+    waitlist_resp = requests.get(f"{WAITLIST_URL}/waitlist/{event_id}/next")
+    if waitlist_resp.status_code != 200:
+        return jsonify({
+            "code": 500,
+            "message": "Cancelled volunteer, but failed to retrieve next waitlisted volunteer",
+            "data": {
+                "cancelledVolunteer": cancelled_data
+            }
+        }), 500
 
-    publish_message("registration.cancelled", {
-        "event_id": event_id,
-        "event_name": event_details["event_name"],
-        "start_date": event_details["start_date"],
-        "end_date": event_details["end_date"],
-        "location": event_details["location"],
-        "status": "cancelled",
-        "email": email
-    })
+    waitlist_json = waitlist_resp.json()
+    next_entry = waitlist_json.get("data")
+    promoted_data = None
+    promoted_volunteer_id = None
 
-    logger.info(f'[Timeout] Auto-cancelled volunteer_id={volunteer_id} for event_id={event_id}')
-    return jsonify({"code": 200, "message": "Timed out registration cancelled"}), 200
+    # If queue is empty
+    if waitlist_json.get("volunteer_id") is None and "data" not in waitlist_json:
+        return jsonify({
+            "code": 200,
+            "message": f"Volunteer {volunteer_id} cancelled successfully. No waitlisted volunteer to promote.",
+            "data": {
+                "cancelledVolunteer": cancelled_data,
+                "promotedVolunteerID": None
+            }
+        }), 200
 
+    # If there is someone in waitlist
+    next_entry = waitlist_json.get("data")
+    if not next_entry:
+        return jsonify({
+            "code": 200,
+            "message": f"Volunteer {volunteer_id} cancelled successfully. No waitlisted volunteer to promote.",
+            "data": {
+                "cancelledVolunteer": cancelled_data,
+                "promotedVolunteerID": None
+            }
+        }), 200
+    
+    promoted_volunteer_id = next_entry.get("volunteer_id")
+    print("DEBUG promoted_volunteer_id:", promoted_volunteer_id)
 
-# ── Health Check
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({"code": 200, "status": "healthy", "service": "cancel-registration-service"}), 200
+    promote_resp = requests.put(
+        f"{REGISTRATION_URL}/registration/status",
+        json={
+            "volunteer_id": promoted_volunteer_id,
+            "event_id": event_id,
+            "status": "pending",
+            "expires_at": (datetime.now(sg_tz) + timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
+        }
+    )
 
+    print("DEBUG promote status:", promote_resp.status_code)
+    print("DEBUG promote body:", promote_resp.text)
+
+    if promote_resp.status_code == 200:
+        promoted_data = promote_resp.json().get("data")
+
+        increment_resp = requests.put(
+            f"{EVENT_URL}/event/{event_id}/capacity",
+            json={"action": "increment"}
+        )
+
+        print("DEBUG increment status:", increment_resp.status_code)
+        print("DEBUG increment body:", increment_resp.text)
+
+        if not increment_resp.ok:
+            return jsonify({
+                "code": 500,
+                "message": "Promoted volunteer, but failed to increment event capacity",
+                "data": {
+                    "cancelledVolunteer": cancelled_data,
+                    "promotedVolunteer": promoted_data
+                }
+            }), 500
+    else:
+        return jsonify({
+            "code": 500,
+            "message": "Cancelled volunteer, but failed to promote next waitlisted volunteer",
+            "data": {
+                "cancelledVolunteer": cancelled_data,
+                "waitlistEntry": next_entry,
+                "promoteError": promote_resp.text
+            }
+        }), 500
+
+    return jsonify({
+        "code": 200,
+        "message": f"Volunteer {volunteer_id} cancelled successfully",
+        "data": {
+            "cancelledVolunteer": cancelled_data,
+            "promotedVolunteerID": promoted_volunteer_id,
+            "promotedVolunteer": promoted_data
+        }
+    }), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5011, debug=False)
