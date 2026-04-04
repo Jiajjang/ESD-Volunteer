@@ -1,5 +1,5 @@
 <script>
-import NavBar from '@/components/navBar.vue'
+import NavBar from '@/components/navbar.vue'
 import { useVolunteerStore } from '@/stores/volunteer'
 import { useOrganiserStore } from '@/stores/organiser'
 import { useSessionStore } from '@/stores/currentRole'
@@ -14,7 +14,6 @@ export default {
             event: null,
             loading: true,
             error: null,
-            // volunteer_id: 1,
             registeredEvents: [],
             loadingRegistration: true,
             registrationSuccess: false,
@@ -33,7 +32,13 @@ export default {
             if (!this.currentEventId) return null
             return this.registeredEvents.find((reg) => reg.event_id === this.currentEventId) || null
         },
-
+        currentRegistrationId() {
+        return (
+            this.currentRegistration?.registration_id ||
+            this.currentRegistration?.id ||
+            null
+        )
+        },
         eventStatus() {
             return (
                 this.currentRegistration?.registration_status?.trim().toLowerCase() ||
@@ -205,6 +210,8 @@ export default {
                     body: JSON.stringify({
                         volunteer_id: this.volunteer_id,
                         event_id: this.currentEventId,
+                        registration_id: this.currentRegistrationId
+
                     }),
                 })
 
