@@ -55,7 +55,9 @@ def get_event_by_volunteer(volunteer_id):
     registrations_resp = requests.get(f"{REGISTRATION_URL}/registration/volunteer/{volunteer_id}")
 
     if registrations_resp.status_code != 200:
-        return jsonify({"code": 404, "message": "Volunteer not found."}), 404
+        registrations = []
+    else:
+        registrations = registrations_resp.json().get("data", {}).get("Registrations", [])
 
     registrations = registrations_resp.json().get("data", {}).get("Registrations", [])
     vol_events = []
