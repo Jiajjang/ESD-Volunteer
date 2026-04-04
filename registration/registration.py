@@ -237,7 +237,7 @@ def add_registration():
 # ─── DELETE ───
 @app.route("/registration", methods=["DELETE"])
 def cancel_registration():
-    """Cancel a registration
+    """Cancel a registration (sets status to cancelled, keeps record)
     ---
     tags:
       - Registration
@@ -259,21 +259,24 @@ def cancel_registration():
               example: 3
     responses:
       200:
-        description: Registration deleted
+        description: Registration cancelled
       400:
         description: User not found
     """
-
     data = request.get_json()
-    deleted = supabase.table("registration")\
-        .delete()\
+    updated = supabase.table("registration")\
+        .update({"status": "cancelled", "expires_at": None})\
         .eq("volunteer_id", data["volunteer_id"])\
         .eq("event_id", data["event_id"])\
         .execute()
-    if deleted.data:
-        return jsonify({"code": 200, "message": "Deletion Success"})
+    if updated.data:
+        return jsonify({
+            "code": 200,
+            "message": "Registration cancelled successfully",
+            "data": format_registration(updated.data[0])
+        })
     return jsonify({"code": 400, "message": "User not found"}), 400
-
+    
 # ─── PUT (update to confirmed) ───
 @app.route("/registration", methods=["PUT"])
 def update_registration():
