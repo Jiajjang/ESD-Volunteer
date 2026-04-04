@@ -102,15 +102,16 @@ def cancel_registration():
     # ── Fetch event details
     event_details = get_event_details(event_id)
 
-    # ── Cancel registration
-    logger.info(f'[Step 2] Deleting registration_id={registration_id}')
-    cancel_resp = requests.delete(
-    f"{REGISTRATION_URL}/registration",
-    json={
-        "volunteer_id": volunteer_id,
-        "event_id":     event_id
-    }
-)
+    # ── Cancel registration (update status to cancelled, keep record)
+    logger.info(f'[Step 2] Cancelling registration for volunteer_id={volunteer_id}, event_id={event_id}')
+    cancel_resp = requests.put(
+        f"{REGISTRATION_URL}/registration/status",
+        json={
+            "volunteer_id": volunteer_id,
+            "event_id":     event_id,
+            "status":       "cancelled"
+        }
+    )
     if cancel_resp.status_code != 200:
       try:
           err_data = cancel_resp.json()
@@ -122,8 +123,8 @@ def cancel_registration():
           "message": f"Failed to cancel registration: {err_msg}"
       }), cancel_resp.status_code
 
-    # cancelled_data = cancel_resp.json().get("data", {})
-    # email = cancelled_data.get("email", "")
+    cancelled_data = cancel_resp.json().get("data", {})
+    email = cancelled_data.get("email", "")
 
     # ── Notify cancellation
     publish_message(
