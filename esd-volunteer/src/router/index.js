@@ -3,6 +3,7 @@ import EventsView from '@/views/events.vue'
 import EventDetailsView from '@/views/eventDetails.vue'
 import VolunteerView from '@/views/volunteer.vue'
 import OrganiserView from '@/views/organiser.vue'
+import LoginView from '@/views/login.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),  // Clean URLs
@@ -20,7 +21,7 @@ const router = createRouter({
 
     },
     {
-      path : '/',
+      path : '/volunteer',
       name: "volunteer",
       component: VolunteerView
     },
@@ -28,6 +29,11 @@ const router = createRouter({
       path : '/organiser',
       name: "organiser",
       component: OrganiserView
+    },
+    {
+      path : '/',
+      name: "login",
+      component: LoginView
     },
   ]
 })
