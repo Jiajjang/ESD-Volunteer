@@ -1,5 +1,5 @@
 <script>
-import NavBar from '@/components/navbar.vue'
+import NavBar from '@/components/navBar.vue'
 import { useVolunteerStore } from '@/stores/volunteer'
 import { useOrganiserStore } from '@/stores/organiser'
 import { useSessionStore } from '@/stores/currentRole'
