@@ -8,6 +8,9 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app)
 
+from flasgger import Swagger
+swagger = Swagger(app)
+
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -19,6 +22,17 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # 1. Get all volunteers
 @app.route("/volunteer")
 def get_all():
+    """Get all volunteers
+    ---
+    tags:
+      - Volunteer
+    responses:
+      200:
+        description: List of all volunteers
+      404:
+        description: No volunteers found
+    """
+
     response = supabase.table("volunteer").select("*").execute()
     volunteers = response.data
 
@@ -34,6 +48,23 @@ def get_all():
 # 2. Get volunteer by ID
 @app.route("/volunteer/<int:volunteer_id>")
 def get_by_id(volunteer_id):
+    """Get a volunteer by ID
+    ---
+    tags:
+      - Volunteer
+    parameters:
+      - in: path
+        name: volunteer_id
+        type: integer
+        required: true
+        description: ID of the volunteer
+    responses:
+      200:
+        description: Volunteer found
+      404:
+        description: Volunteer not found
+    """
+
     response = supabase.table("volunteer").select("*").eq("volunteer_id", volunteer_id).execute()
     volunteer = response.data
 
@@ -49,6 +80,23 @@ def get_by_id(volunteer_id):
 # 3. Get volunteer by email
 @app.route("/volunteer/<string:email>")
 def get_by_email(email):
+    """Get a volunteer by email
+    ---
+    tags:
+      - Volunteer
+    parameters:
+      - in: path
+        name: email
+        type: string
+        required: true
+        description: Email of the volunteer
+    responses:
+      200:
+        description: Volunteer found
+      404:
+        description: Volunteer not found
+    """
+
     response = supabase.table("volunteer").select("*").eq("email", email).execute()
     volunteer = response.data
 
@@ -64,6 +112,45 @@ def get_by_email(email):
 # 4. Create volunteer
 @app.route("/volunteer", methods=['POST'])
 def create_volunteer():
+    """Create a new volunteer
+    ---
+    tags:
+      - Volunteer
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - volunteerName
+            - email
+            - password
+          properties:
+            volunteerName:
+              type: string
+              example: John Doe
+            phoneNumber:
+              type: string
+              example: "91234567"
+            email:
+              type: string
+              example: john@example.com
+            password:
+              type: string
+              example: password123
+            gender:
+              type: string
+              example: M
+    responses:
+      201:
+        description: Volunteer created
+      400:
+        description: Email already exists
+      500:
+        description: Internal server error
+    """
+
     data = request.get_json()
 
     # check if email exists
@@ -91,6 +178,39 @@ def create_volunteer():
 # 5. Update volunteer
 @app.route("/volunteer/<int:volunteer_id>", methods=['PUT'])
 def update_volunteer(volunteer_id):
+    """Update a volunteer
+    ---
+    tags:
+      - Volunteer
+    parameters:
+      - in: path
+        name: volunteer_id
+        type: integer
+        required: true
+        description: ID of the volunteer
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            volunteerName:
+              type: string
+            phoneNumber:
+              type: string
+            email:
+              type: string
+            gender:
+              type: string
+    responses:
+      200:
+        description: Volunteer updated
+      404:
+        description: Volunteer not found
+      500:
+        description: Internal server error
+    """
+    
     data = request.get_json()
 
     data['modified'] = datetime.now().isoformat()

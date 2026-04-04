@@ -4,10 +4,13 @@ from datetime import datetime, timedelta
 import pytz
 from dotenv import load_dotenv
 
+
 load_dotenv()
 sg_tz = pytz.timezone('Asia/Singapore')
 
 app = Flask(__name__)
+from flasgger import Swagger
+swagger = Swagger(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -74,10 +77,39 @@ def get_event_details(event_id: int) -> dict:
 # ── POST /cancel-registration ─────────────────────────────────────────────────
 @app.route("/cancel-registration", methods=["POST"])
 def cancel_registration():
+    """Cancel a volunteer's registration and promote next in waitlist
+    ---
+    tags:
+      - Cancel Registration
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - volunteer_id
+            - event_id
+            - registration_id
+          properties:
+            volunteer_id:
+              type: integer
+              example: 42
+            event_id:
+              type: integer
+              example: 3
+            registration_id:
+              type: integer
+              example: 5
+    responses:
+      200:
+        description: Registration cancelled, next volunteer promoted if available
+      400:
+        description: Missing required fields
+      500:
+        description: Internal server error
     """
-    Body: { "volunteer_id": 42, "event_id": 3, "registration_id": 5 }
-    Cancels a registration and promotes next waitlisted volunteer if any.
-    """
+
     data = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id = data.get("event_id")
@@ -177,10 +209,40 @@ def cancel_registration():
 # ── PUT /cancel-registration/respond ─────────────────────────────────────────
 @app.route("/cancel-registration/respond", methods=["PUT"])
 def respond_to_promotion():
+    """Respond to a waitlist promotion
+    ---
+    tags:
+      - Cancel Registration
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - volunteer_id
+            - event_id
+            - status
+          properties:
+            volunteer_id:
+              type: integer
+              example: 99
+            event_id:
+              type: integer
+              example: 3
+            status:
+              type: string
+              enum: [confirmed, rejected]
+              example: confirmed
+    responses:
+      200:
+        description: Registration status updated
+      400:
+        description: Invalid fields
+      500:
+        description: Failed to update status
     """
-    Body: { "volunteer_id": 99, "event_id": 3, "status": "confirmed" | "rejected" }
-    Updates pending registration after volunteer responds.
-    """
+
     data = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id = data.get("event_id")
@@ -221,10 +283,35 @@ def respond_to_promotion():
 # ── PUT /cancel-registration/timeout ─────────────────────────────────────────
 @app.route("/cancel-registration/timeout", methods=["PUT"])
 def handle_timeout():
+    """Auto-cancel a pending registration after timeout
+    ---
+    tags:
+      - Cancel Registration
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - volunteer_id
+            - event_id
+          properties:
+            volunteer_id:
+              type: integer
+              example: 99
+            event_id:
+              type: integer
+              example: 3
+    responses:
+      200:
+        description: Timed out registration cancelled
+      400:
+        description: Missing required fields
+      500:
+        description: Failed to auto-cancel
     """
-    Body: { "volunteer_id": 99, "event_id": 3 }
-    Auto-cancels pending registrations after timeout.
-    """
+
     data = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id = data.get("event_id")
@@ -263,6 +350,14 @@ def handle_timeout():
 # ── Health Check
 @app.route("/health", methods=["GET"])
 def health():
+    """Health check
+    ---
+    tags:
+      - Health
+    responses:
+      200:
+        description: Service is healthy
+    """
     return jsonify({"code": 200, "status": "healthy", "service": "cancel-registration-service"}), 200
 
 

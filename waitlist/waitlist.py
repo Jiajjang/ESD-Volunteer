@@ -13,6 +13,9 @@ sg_tz = pytz.timezone('Asia/Singapore')
 app = Flask(__name__)
 CORS(app)
 
+from flasgger import Swagger
+swagger = Swagger(app)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -48,11 +51,39 @@ def get_rabbitmq_connection():
 # ─────────────────────────────────────────────────────────────────────────────
 @app.route('/waitlist/<int:event_id>', methods=['POST'])
 def add_to_waitlist(event_id):
-    """
-    Body:    { "volunteer_id": 201 }
-    Returns: 201 with new entry | 409 if already in queue | 400 if missing field
+    """Add a volunteer to the waitlist for an event
+    ---
+    tags:
+      - Waitlist
+    parameters:
+      - in: path
+        name: event_id
+        type: integer
+        required: true
+        description: ID of the event
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - volunteer_id
+          properties:
+            volunteer_id:
+              type: integer
+              example: 201
+    responses:
+      201:
+        description: Volunteer added to waitlist
+      400:
+        description: Missing volunteer_id
+      409:
+        description: Volunteer already in waitlist
+      500:
+        description: Internal server error
     """
     data = request.get_json()
+
     if not data or not data.get('volunteer_id'):
         return jsonify({'code': 400, 'message': 'volunteer_id is required'}), 400
 
@@ -94,10 +125,37 @@ def add_to_waitlist(event_id):
 # ─────────────────────────────────────────────────────────────────────────────
 @app.route('/waitlist/<int:event_id>/next', methods=['GET'])
 def get_next_volunteer(event_id):
+    """Get and remove the next volunteer from the waitlist
+    ---
+    tags:
+      - Waitlist
+    parameters:
+      - in: path
+        name: event_id
+        type: integer
+        required: true
+        description: ID of the event
+    responses:
+      200:
+        description: Next volunteer returned (or null if queue empty)
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              type: object
+              properties:
+                waitlist_id:
+                  type: integer
+                volunteer_id:
+                  type: integer
+                event_id:
+                  type: integer
+                joined_at:
+                  type: string
     """
-    Returns: { waitlist_id, volunteer_id, event_id, joined_at }
-         or: { volunteer_id: null } if queue is empty
-    """
+    
     # Get the oldest entry (first in queue)
     response = supabase.table('waitlist') \
         .select('*') \
@@ -128,6 +186,34 @@ def get_next_volunteer(event_id):
 # ─────────────────────────────────────────────────────────────────────────────
 @app.route('/waitlist/<int:event_id>', methods=['GET'])
 def get_waitlist(event_id):
+    """View the full waitlist queue for an event
+    ---
+    tags:
+      - Waitlist
+    parameters:
+      - in: path
+        name: event_id
+        type: integer
+        required: true
+        description: ID of the event
+    responses:
+      200:
+        description: Full waitlist returned in order
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            event_id:
+              type: integer
+            count:
+              type: integer
+            data:
+              type: array
+              items:
+                type: object
+    """
+
     response = supabase.table('waitlist') \
         .select('*') \
         .eq('event_id', event_id) \
@@ -145,6 +231,14 @@ def get_waitlist(event_id):
 # ── GET /health ───────────────────────────────────────────────────────────────
 @app.route('/health', methods=['GET'])
 def health():
+    """Health check
+    ---
+    tags:
+      - Health
+    responses:
+      200:
+        description: Service is healthy
+    """
     return jsonify({'code': 200, 'status': 'healthy', 'service': 'waitlist-service'}), 200
 
 
