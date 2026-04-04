@@ -77,39 +77,6 @@ def get_event_details(event_id: int) -> dict:
 # ── POST /cancel-registration ─────────────────────────────────────────────────
 @app.route("/cancel-registration", methods=["POST"])
 def cancel_registration():
-    """Cancel a volunteer's registration and promote next in waitlist
-    ---
-    tags:
-      - Cancel Registration
-    parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          required:
-            - volunteer_id
-            - event_id
-            - registration_id
-          properties:
-            volunteer_id:
-              type: integer
-              example: 42
-            event_id:
-              type: integer
-              example: 3
-            registration_id:
-              type: integer
-              example: 5
-    responses:
-      200:
-        description: Registration cancelled, next volunteer promoted if available
-      400:
-        description: Missing required fields
-      500:
-        description: Internal server error
-    """
-
     data = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id = data.get("event_id")

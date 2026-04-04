@@ -143,5 +143,26 @@ services:
       - waitlist
       - rabbitmq
     restart: always
+  frontend:
+    build: ./esd-volunteer
+    ports:
+      - "8080:8080"
+    environment:
+      - REGISTRATION_URL=http://registration:5000
+      - EVENT_URL=http://event:5001
+      - VOLUNTEER_URL=http://volunteer:5002
+      - WAITLIST_URL=http://waitlist:5003
+      - RABBITMQ_HOST=active-white-bear-01.rmq6.cloudamqp.com
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_VHOST=ntxsydfp
+      - RABBITMQ_USER=ntxsydfp
+      - RABBITMQ_PASS=VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9
+    depends_on:
+      - event
+      - volunteer
+      - registration
+      - waitlist
+      - rabbitmq
+    restart: always
     
 
