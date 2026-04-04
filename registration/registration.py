@@ -21,6 +21,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 app = Flask(__name__)
 CORS(app)
 
+from flasgger import Swagger
+swagger = Swagger(app)
+
 # Helper to convert Supabase row to JSON
 def format_registration(reg):
     return {
@@ -44,6 +47,17 @@ def getData(filters: dict = None):
 # ─── GET ───
 @app.route("/registration")
 def get_all():
+    """Get all registrations
+    ---
+    tags:
+      - Registration
+    responses:
+      200:
+        description: List of all registrations
+      404:
+        description: No registrations found
+    """
+
     registrations = getData()
     if registrations:
         return jsonify({"code": 200, "data": {"Registrations": [format_registration(r) for r in registrations]}})
@@ -51,6 +65,23 @@ def get_all():
 
 @app.route("/registration/<int:event_id>")
 def get_by_event(event_id):
+    """Get registrations by event ID
+    ---
+    tags:
+      - Registration
+    parameters:
+      - in: path
+        name: event_id
+        type: integer
+        required: true
+        description: ID of the event
+    responses:
+      200:
+        description: Registrations found
+      400:
+        description: Event not found
+    """
+
     registrations = getData({"event_id": event_id})
     if registrations:
         return jsonify({"code": 200, "data": {"Registrations": [format_registration(r) for r in registrations]}})
@@ -58,6 +89,23 @@ def get_by_event(event_id):
 
 @app.route("/registration/<int:event_id>/emails")
 def get_emails_by_event(event_id):
+    """Get all registered emails for an event
+    ---
+    tags:
+      - Registration
+    parameters:
+      - in: path
+        name: event_id
+        type: integer
+        required: true
+        description: ID of the event
+    responses:
+      200:
+        description: List of emails
+      404:
+        description: No emails found
+    """
+
     response = (
         supabase.table("registration")
         .select("email")
@@ -80,6 +128,26 @@ def get_emails_by_event(event_id):
 
 @app.route("/registration/<int:event_id>/<int:volunteer_id>")
 def get_by_event_and_volunteer(event_id, volunteer_id):
+    """Get registration by event ID and volunteer ID
+    ---
+    tags:
+      - Registration
+    parameters:
+      - in: path
+        name: event_id
+        type: integer
+        required: true
+      - in: path
+        name: volunteer_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Registration found
+      400:
+        description: Not found
+    """
+
     registrations = getData({"event_id": event_id, "volunteer_id" : volunteer_id})
     if registrations:
         return jsonify({"code": 200, "data": {"Registrations": [format_registration(r) for r in registrations]}})
@@ -87,6 +155,22 @@ def get_by_event_and_volunteer(event_id, volunteer_id):
 
 @app.route("/registration/volunteer/<int:volunteer_id>")
 def get_by_volunteer(volunteer_id):
+    """Get registrations by volunteer ID
+    ---
+    tags:
+      - Registration
+    parameters:
+      - in: path
+        name: volunteer_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Registrations found
+      400:
+        description: Not found
+    """
+
     registrations = getData({ "volunteer_id" : volunteer_id})
     if registrations:
         return jsonify({"code": 200, "data": {"Registrations": [format_registration(r) for r in registrations]}})
@@ -95,6 +179,44 @@ def get_by_volunteer(volunteer_id):
 # ─── POST ───
 @app.route("/registration", methods=["POST"])
 def add_registration():
+    """Create a new registration
+    ---
+    tags:
+      - Registration
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - volunteer_id
+            - email
+            - event_id
+          properties:
+            volunteer_id:
+              type: integer
+              example: 1
+            email:
+              type: string
+              example: john@example.com
+            event_id:
+              type: integer
+              example: 3
+            status:
+              type: string
+              enum: [confirmed, waitlisted, pending]
+              example: confirmed
+            expires_at:
+              type: string
+              example: "2026-04-05 12:00:00"
+    responses:
+      201:
+        description: Registration created
+      400:
+        description: User already registered
+    """
+
     data = request.get_json()
     existing = getData({"volunteer_id": data["volunteer_id"], "event_id": data["event_id"]})
     if existing and existing[0]["status"] in ["confirmed", "waitlisted"]:
@@ -112,30 +234,36 @@ def add_registration():
     result = supabase.table("registration").insert(registration).execute()
     return jsonify({"code": 201, "data": result.data[0]}), 201
 
-# @app.route("/registration", methods=["POST"])
-# def add_registration():
-#     data = request.get_json()
-#     existing = getData({"volunteer_id": data["volunteer_id"], "event_id": data["event_id"]})
-#     if existing and existing[0]["status"] in ["confirmed", "pending"]:
-#         return jsonify({"code": 400, "message": "User already registered"}), 400
-
-#     registration = {
-#         "volunteer_id": data["volunteer_id"],
-#         "email": data["email"],
-#         "event_id": data["event_id"],
-#         "status": data["status"],
-#         "registered_at": datetime.now(sg_tz).isoformat(),
-#         "expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
-#     }
-
-#     supabase.table("registration").insert(registration).execute()
-#     print(type(registration), registration)
-#     data = registration[0] if isinstance(registration, list) else registration
-#     return jsonify({"code": 201, "data": data}), 201
-
 # ─── DELETE ───
 @app.route("/registration", methods=["DELETE"])
 def cancel_registration():
+    """Cancel a registration
+    ---
+    tags:
+      - Registration
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - volunteer_id
+            - event_id
+          properties:
+            volunteer_id:
+              type: integer
+              example: 1
+            event_id:
+              type: integer
+              example: 3
+    responses:
+      200:
+        description: Registration deleted
+      400:
+        description: User not found
+    """
+
     data = request.get_json()
     deleted = supabase.table("registration")\
         .delete()\
@@ -149,6 +277,33 @@ def cancel_registration():
 # ─── PUT (update to confirmed) ───
 @app.route("/registration", methods=["PUT"])
 def update_registration():
+    """Update registration status to confirmed
+    ---
+    tags:
+      - Registration
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - volunteer_id
+            - event_id
+          properties:
+            volunteer_id:
+              type: integer
+              example: 1
+            event_id:
+              type: integer
+              example: 3
+    responses:
+      200:
+        description: Status updated to confirmed
+      400:
+        description: User not found
+    """
+
     data = request.get_json()
     updated = supabase.table("registration")\
         .update({"status": "confirmed"})\
@@ -162,6 +317,41 @@ def update_registration():
 # ─── PUT /registration/status (used by composite) ───
 @app.route("/registration/status", methods=["PUT"])
 def update_registration_status():
+    """Update registration status
+    ---
+    tags:
+      - Registration
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - volunteer_id
+            - event_id
+            - status
+          properties:
+            volunteer_id:
+              type: integer
+              example: 1
+            event_id:
+              type: integer
+              example: 3
+            status:
+              type: string
+              enum: [confirmed, pending, cancelled, rejected]
+              example: pending
+            expires_at:
+              type: string
+              example: "2026-04-05 12:00:00"
+    responses:
+      200:
+        description: Status updated
+      400:
+        description: Missing fields or user not found
+    """
+    
     data = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id = data.get("event_id")

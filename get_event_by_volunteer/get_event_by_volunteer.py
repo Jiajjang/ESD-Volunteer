@@ -7,6 +7,9 @@ app = Flask(__name__)
 CORS(app)
 load_dotenv()
 
+from flasgger import Swagger
+swagger = Swagger(app)
+
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -20,6 +23,35 @@ VOLUNTEER_URL    = os.getenv("VOLUNTEER_URL",     "http://volunteer:5002")
 
 @app.route("/get_event_by_volunteer/<int:volunteer_id>", methods=["GET"])
 def get_event_by_volunteer(volunteer_id):
+    """Get all events a volunteer is registered for
+    ---
+    tags:
+      - Event by Volunteer
+    parameters:
+      - in: path
+        name: volunteer_id
+        type: integer
+        required: true
+        description: ID of the volunteer
+    responses:
+      200:
+        description: List of events the volunteer is registered for
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              type: object
+              properties:
+                events:
+                  type: array
+                  items:
+                    type: object
+      404:
+        description: Volunteer not found
+    """
+    
     registrations_resp = requests.get(f"{REGISTRATION_URL}/registration/volunteer/{volunteer_id}")
 
     if registrations_resp.status_code != 200:

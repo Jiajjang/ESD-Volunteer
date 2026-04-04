@@ -7,6 +7,9 @@ app = Flask(__name__)
 CORS(app)
 load_dotenv()
 
+from flasgger import Swagger
+swagger = Swagger(app)
+
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -56,6 +59,56 @@ def publish_notification(routing_key: str, message: dict):
 # ── Main composite route ─────────────────────────────────────────
 @app.route("/register_for_event", methods=["POST"])
 def register_for_event():
+    """Register a volunteer for an event
+    ---
+    tags:
+      - Registration
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - volunteer_id
+            - event_id
+          properties:
+            volunteer_id:
+              type: integer
+              example: 1
+            event_id:
+              type: integer
+              example: 3
+    responses:
+      200:
+        description: Registration successful
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+              example: 200
+            data:
+              type: object
+              properties:
+                registration_id:
+                  type: integer
+                event_id:
+                  type: integer
+                start_date:
+                  type: string
+                end_date:
+                  type: string
+                status:
+                  type: string
+                  enum: [confirmed, waitlisted]
+      400:
+        description: Missing required fields
+      404:
+        description: Volunteer not found
+      500:
+        description: Internal server error
+    """
     data         = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id     = data.get("event_id")

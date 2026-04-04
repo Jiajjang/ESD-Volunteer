@@ -69,20 +69,6 @@ export default {
                 this.loading = false
             }
         },
-
-        async goToVolunteer() {
-            const sessionStore = useSessionStore()
-            sessionStore.setRole('volunteer')
-            await this.$router.push('/')
-            this.fetchCurrentUser()
-        },
-
-        async goToOrganiser() {
-            const sessionStore = useSessionStore()
-            sessionStore.setRole('organiser')
-            await this.$router.push('/organiser')
-            this.fetchCurrentUser()
-        },
     },
 
     mounted() {
@@ -100,28 +86,10 @@ export default {
 <template>
     <div class="navbar bg-base-100 border-b border-base-300 px-6">
         <div class="navbar-start">
-            <div class="dropdown">
-                <div class="flex flex-row items-center">
-                    <label tabindex="0" class="btn btn-ghost text-xl font-bold normal-case">
-                        {{ currentRole }}
-                    </label>
-                </div>
-
-                <ul
-                    tabindex="0"
-                    class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 z-50"
-                >
-                    <li>
-                        <button @click="goToVolunteer" class="text-left normal-case">
-                            Volunteer Portal
-                        </button>
-                    </li>
-                    <li>
-                        <button @click="goToOrganiser" class="text-left normal-case">
-                            Organiser Dashboard
-                        </button>
-                    </li>
-                </ul>
+            <div class="flex flex-row items-center">
+                <h3 class="text-2xl font-bold">
+                    {{ currentRole }}
+                </h3>
             </div>
         </div>
 
@@ -140,26 +108,64 @@ export default {
                 Events
             </router-link>
         </div>
-
-        <div class="navbar-end flex items-center gap-3">
-            <div class="avatar online placeholder">
+        <div class="navbar-end">
+            <div class="dropdown dropdown-end">
                 <div
-                    class="w-8 rounded-full ring ring-offset-2"
-                    :class="
-                        currentRole === 'Organiser'
-                            ? 'bg-cyan-100 ring-cyan-200'
-                            : 'bg-emerald-100 ring-emerald-200'
-                    "
+                    tabindex="0"
+                    role="button"
+                    class="btn btn-ghost h-auto min-h-0 px-2 normal-case hover:bg-base-200"
                 >
-                    <span
-                        class="text-base font-bold flex items-center justify-center h-full px-1"
-                        :class="currentRole === 'Organiser' ? 'text-cyan-700' : 'text-emerald-700'"
-                    >
-                        {{ userInitial }}
-                    </span>
+                    <div class="flex items-center gap-3">
+                        <div class="avatar online placeholder">
+                            <div
+                                class="w-8 rounded-full ring ring-offset-2"
+                                :class="
+                                    currentRole === 'Organiser'
+                                        ? 'bg-cyan-100 ring-cyan-200'
+                                        : 'bg-emerald-100 ring-emerald-200'
+                                "
+                            >
+                                <span
+                                    class="flex h-full items-center justify-center px-1 text-base font-bold"
+                                    :class="
+                                        currentRole === 'Organiser'
+                                            ? 'text-cyan-700'
+                                            : 'text-emerald-700'
+                                    "
+                                >
+                                    {{ userInitial }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <span class="font-semibold text-base-content">{{ displayName }}</span>
+
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-4 w-4 text-base-content/60"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M19 9l-7 7-7-7"
+                            />
+                        </svg>
+                    </div>
                 </div>
+
+                <ul
+                    tabindex="0"
+                    class="menu menu-sm dropdown-content z-1 mt-3 w-44 rounded-box border border-base-200 bg-base-100 p-2 shadow"
+                >   
+                    <li>
+                        <RouterLink to="/" class="text-error"> Logout </RouterLink>
+                    </li>
+                </ul>
             </div>
-            <span class="font-semibold text-base-content">{{ displayName }}</span>
         </div>
     </div>
 </template>
