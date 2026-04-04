@@ -15,9 +15,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ── Service URLs ──────────────────────────────────────────────────────────────
-REGISTRATION_URL = os.getenv("REGISTRATION_SERVICE_URL", "http://localhost:5000")
-WAITLIST_URL     = os.getenv("WAITLIST_SERVICE_URL",     "http://localhost:5003")
-EVENT_URL        = os.getenv("EVENT_SERVICE_URL",        "http://localhost:5001")
+REGISTRATION_URL = os.getenv("REGISTRATION_URL", "http://localhost:5000")
+WAITLIST_URL     = os.getenv("WAITLIST_URL",     "http://localhost:5003")
+EVENT_URL        = os.getenv("EVENT_URL",        "http://localhost:5001")
 
 # ── RabbitMQ ──────────────────────────────────────────────────────────────────
 RABBITMQ_HOST  = os.getenv("RABBITMQ_HOST",  "active-white-bear-01.rmq6.cloudamqp.com")
@@ -123,12 +123,21 @@ def cancel_registration():
 
     # ── Cancel registration
     logger.info(f'[Step 2] Deleting registration_id={registration_id}')
-    cancel_resp = requests.delete(f"{REGISTRATION_URL}/registration/{registration_id}")
-    if cancel_resp.status_code not in (200, 204):
+    cancel_resp = requests.delete(
+    f"{REGISTRATION_URL}/registration",
+    json={
+        "volunteer_id": volunteer_id,
+        "event_id":     event_id
+    }
+)
+    if cancel_resp.status_code != 200:
         return jsonify({"code": cancel_resp.status_code, "message": f"Failed to cancel registration: {cancel_resp.text}"}), cancel_resp.status_code
+    
+    email = ""
+    cancelled_data = {"volunteerID": volunteer_id, "eventID": event_id}
 
-    cancelled_data = cancel_resp.json().get("data", {})
-    email = cancelled_data.get("email", "")
+    # cancelled_data = cancel_resp.json().get("data", {})
+    # email = cancelled_data.get("email", "")
 
     # ── Notify cancellation
     publish_message("registration.cancelled", {
@@ -362,4 +371,4 @@ def health():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5011, debug=False)
+    app.run(host="0.0.0.0", port=5011, debug=True)
