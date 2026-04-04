@@ -1,6 +1,6 @@
 <script>
 import EventsCard from '@/components/eventsCard.vue'
-import NavBar from '@/components/navbar.vue'
+import NavBar from '@/components/navBar.vue'
 import { useVolunteerStore } from '@/stores/volunteer'
 
 export default {
@@ -20,13 +20,18 @@ export default {
         }
     },
 
-    computed: {
-        volunteerName() {
-            return this.volunteer ? this.volunteer.volunteer_name : ''
-        },
-        volunteer_id() {
-            return useVolunteerStore().volunteerId
-        },
+    mounted() {
+    const store = useVolunteerStore()
+    console.log("Store ID:", store.volunteerId)
+
+    if (!store.volunteerId) {
+        this.error = "Volunteer not logged in"
+        this.loading = false
+        return
+    }
+
+    this.fetchVolunteer()
+    this.fetchVolunteerEvents()
     },
 
     methods: {
