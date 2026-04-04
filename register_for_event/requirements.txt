@@ -3,3 +3,4 @@ flask-cors
 pika
 requests
 python-dotenv
+flasgger

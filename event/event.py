@@ -11,6 +11,9 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
+from flasgger import Swagger
+swagger = Swagger(app)
+
 # --- Supabase ---
 supabase = create_client(os.environ.get('SUPABASE_URL'), os.environ.get('SUPABASE_KEY'))
 
@@ -47,6 +50,18 @@ def publish_event_cancelled(event_id, event_name, start_date, end_date):
 #Get All Events
 @app.route("/event", methods=['GET'])
 def get_all():
+    """Get all events
+    ---
+    tags:
+      - Event
+    responses:
+      200:
+        description: List of all events
+      404:
+        description: No events found
+      500:
+        description: Internal server error
+    """
     try:
         response = supabase.table('event').select('*').execute()
         if response.data:
@@ -66,6 +81,25 @@ def get_all():
 #Get Event by ID
 @app.route("/event/<int:event_id>", methods=['GET'])
 def get_by_id(event_id):
+    """Get an event by ID
+    ---
+    tags:
+      - Event
+    parameters:
+      - in: path
+        name: event_id
+        type: integer
+        required: true
+        description: ID of the event
+    responses:
+      200:
+        description: Event found
+      404:
+        description: Event not found
+      500:
+        description: Internal server error
+    """
+
     try:
         response = supabase.table('event').select('*').eq('event_id', event_id).execute()
         if response.data:
@@ -78,6 +112,25 @@ def get_by_id(event_id):
 # Get Event by OrganiserId
 @app.route("/event/organiser/<int:organiser_id>", methods=['GET'])
 def get_by_organiser(organiser_id):
+    """Get events by organiser ID
+    ---
+    tags:
+      - Event
+    parameters:
+      - in: path
+        name: organiser_id
+        type: integer
+        required: true
+        description: ID of the organiser
+    responses:
+      200:
+        description: Events found
+      404:
+        description: No events found for this organiser
+      500:
+        description: Internal server error
+    """
+
     try:
         response = (
             supabase.table('event').select('*').eq('organiser_id', organiser_id).execute()
@@ -104,6 +157,39 @@ def get_by_organiser(organiser_id):
 #Scenario 1 and 2 Update Capacity
 @app.route("/event/<int:event_id>/capacity", methods=['PUT'])
 def update_capacity(event_id):
+    """Increment or decrement event capacity
+    ---
+    tags:
+      - Event
+    parameters:
+      - in: path
+        name: event_id
+        type: integer
+        required: true
+        description: ID of the event
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - action
+          properties:
+            action:
+              type: string
+              enum: [increment, decrement]
+              example: increment
+    responses:
+      200:
+        description: Capacity updated
+      400:
+        description: Event is full
+      404:
+        description: Event not found
+      500:
+        description: Internal server error
+    """
+
     try:
         data = request.get_json()
         action = data.get('action')
@@ -149,6 +235,33 @@ def update_capacity(event_id):
 #Scenario 3 Cancel Event (RabbitMQ Fanout)
 @app.route("/event/<int:event_id>", methods=['DELETE'])
 def delete_event(event_id):
+    """Cancel an event and notify all services via RabbitMQ
+    ---
+    tags:
+      - Event
+    parameters:
+      - in: path
+        name: event_id
+        type: integer
+        required: true
+        description: ID of the event
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            reason:
+              type: string
+              example: Bad weather conditions
+    responses:
+      200:
+        description: Event cancelled
+      404:
+        description: Event not found
+      500:
+        description: Internal server error
+    """
+    
     try:
         data = request.get_json() or {}
         reason = data.get('reason', 'No reason provided')
