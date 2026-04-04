@@ -112,10 +112,15 @@ def cancel_registration():
     }
 )
     if cancel_resp.status_code != 200:
-        return jsonify({"code": cancel_resp.status_code, "message": f"Failed to cancel registration: {cancel_resp.text}"}), cancel_resp.status_code
-    
-    email = ""
-    cancelled_data = {"volunteerID": volunteer_id, "eventID": event_id}
+      try:
+          err_data = cancel_resp.json()
+          err_msg = err_data.get("message", cancel_resp.text)
+      except ValueError:
+          err_msg = cancel_resp.text  # fallback if not JSON
+      return jsonify({
+          "code": cancel_resp.status_code,
+          "message": f"Failed to cancel registration: {err_msg}"
+      }), cancel_resp.status_code
 
     # cancelled_data = cancel_resp.json().get("data", {})
     # email = cancelled_data.get("email", "")
