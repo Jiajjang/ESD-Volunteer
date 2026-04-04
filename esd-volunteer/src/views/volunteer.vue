@@ -1,6 +1,6 @@
 <script>
 import EventsCard from '@/components/eventsCard.vue'
-import NavBar from '@/components/navBar.vue'
+import NavBar from '@/components/navbar.vue'
 import { useVolunteerStore } from '@/stores/volunteer'
 
 export default {
@@ -12,32 +12,36 @@ export default {
     data() {
         return {
             events: [],
-            // registeredEvents: [],
             loading: true,
             error: null,
             volunteer: null,
-            // volunteer_id: 1,
         }
     },
 
+    computed: {
+        volunteerId() {
+            const store = useVolunteerStore()
+            return store.volunteerId
+        },
+    },
+
     mounted() {
-    const store = useVolunteerStore()
-    console.log("Store ID:", store.volunteerId)
+        console.log('Store ID:', this.volunteerId)
 
-    if (!store.volunteerId) {
-        this.error = "Volunteer not logged in"
-        this.loading = false
-        return
-    }
+        if (!this.volunteerId) {
+            this.error = 'Volunteer not logged in'
+            this.loading = false
+            return
+        }
 
-    this.fetchVolunteer()
-    this.fetchVolunteerEvents()
+        this.fetchVolunteer()
+        this.fetchVolunteerEvents()
     },
 
     methods: {
         async fetchVolunteer() {
             try {
-                const response = await fetch(`http://localhost:5002/volunteer/${this.volunteer_id}`)
+                const response = await fetch(`http://localhost:5002/volunteer/${this.volunteerId}`)
                 if (!response.ok) throw new Error('API failed')
 
                 const data = await response.json()
@@ -54,7 +58,7 @@ export default {
         async fetchVolunteerEvents() {
             try {
                 const response = await fetch(
-                    `http://localhost:5012/get_event_by_volunteer/${this.volunteer_id}`,
+                    `http://localhost:5012/get_event_by_volunteer/${this.volunteerId}`,
                 )
                 if (!response.ok) throw new Error('API failed')
 
@@ -68,11 +72,6 @@ export default {
                 this.loading = false
             }
         },
-    },
-
-    mounted() {
-        this.fetchVolunteer()
-        this.fetchVolunteerEvents()
     },
 }
 </script>
