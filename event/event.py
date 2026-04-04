@@ -263,25 +263,29 @@ def delete_event(event_id):
     """
     
     try:
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         reason = data.get('reason', 'No reason provided')
 
         # Update Supabase Status
-        response = supabase.table('event').update({
-            "status": "cancelled",
-            "reason": reason
-        }).eq('event_id', event_id).select("event_id, event_name, start_date, end_date").execute()
+        event_result = supabase.table('event').select(
+            "event_id, name, start_date, end_date"
+        ).eq('event_id', event_id).execute()
 
-        if not response.data:
+        if not event_result.data:
             return jsonify({
-                "code": 404, 
+                "code": 404,
                 "message": "Event not found"
             }), 404
-        
-        event_row = response.data[0]
-        event_name = event_row.get("event_name")
+
+        event_row = event_result.data[0]
+        event_name = event_row.get("name")
         start_date = event_row.get("start_date")
         end_date = event_row.get("end_date")
+
+        supabase.table('event').update({
+            "status": "cancelled",
+            "reason": reason
+        }).eq('event_id', event_id).execute()
         
         # Publish to RabbitMQ (The Fanout Exchange)
         publish_event_cancelled(event_id, event_name, start_date, end_date)
