@@ -1,7 +1,6 @@
 <script>
-import { useVolunteerStore } from '@/stores/volunteer'
-import { useOrganiserStore } from '@/stores/organiser'
 import { useSessionStore } from '@/stores/currentRole'
+
 export default {
     name: 'LoginTabs',
     data() {
@@ -10,16 +9,16 @@ export default {
         }
     },
     methods: {
-        async setVolunteer() {
+        setVolunteer() {
             const sessionStore = useSessionStore()
             sessionStore.setRole('volunteer')
-            this.fetchCurrentUser()
+            this.$router.push('/volunteer')
         },
 
-        async setOrganiser() {
+        setOrganiser() {
             const sessionStore = useSessionStore()
             sessionStore.setRole('organiser')
-            this.fetchCurrentUser()
+            this.$router.push('/organiser')
         },
     },
 }
@@ -95,13 +94,13 @@ export default {
                     />
                 </div>
 
-                <router-link
-                @click = "setVolunteer"
-                    to="/volunteer"
+                <button
+                    type="button"
+                    @click="setVolunteer"
                     class="btn btn-primary bg-green-600 w-full rounded-xl border-0 text-white"
                 >
                     Login as Volunteer
-                </router-link>
+                </button>
             </form>
 
             <form v-else class="space-y-4" @submit.prevent>
@@ -129,13 +128,13 @@ export default {
                     />
                 </div>
 
-                <router-link
-                @click="setOrganiser"
-                    to="/organiser"
+                <button
+                    type="button"
+                    @click="setOrganiser"
                     class="btn btn-primary bg-cyan-700 w-full rounded-xl border-0 text-white"
                 >
                     Login as Organiser
-                </router-link>
+                </button>
             </form>
         </section>
     </main>

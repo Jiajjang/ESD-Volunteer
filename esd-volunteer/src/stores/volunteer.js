@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 
 export const useVolunteerStore = defineStore('volunteer', {
     state: () => ({
-        volunteerId: 2,
+        volunteerId: 1,
     }),
     actions: {
         setVolunteerId(id) {

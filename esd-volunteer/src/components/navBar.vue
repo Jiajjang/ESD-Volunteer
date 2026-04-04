@@ -95,7 +95,7 @@ export default {
 
         <div v-if="currentRole === 'Volunteer'" class="navbar-center md:flex gap-8">
             <router-link
-                to="/"
+                to="/volunteer"
                 class="font-semibold text-base-content/80 hover:text-emerald-600 hover:underline decoration-2 underline-offset-4 transition-all duration-300 px-2 py-1 rounded-md"
             >
                 Home
