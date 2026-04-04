@@ -103,24 +103,27 @@ def cancel_registration():
     event_details = get_event_details(event_id)
 
     # ── Cancel registration
-    logger.info(f"[Step 2] Deleting registration_id={registration_id}")
+    logger.info(f'[Step 2] Deleting registration_id={registration_id}')
     cancel_resp = requests.delete(
-        f"{REGISTRATION_URL}/registration",
-        json={"volunteer_id": volunteer_id, "event_id": event_id},
-    )
-    if cancel_resp.status_code not in (200, 204):
-        return (
-            jsonify(
-                {
-                    "code": cancel_resp.status_code,
-                    "message": f"Failed to cancel registration: {cancel_resp.text}",
-                }
-            ),
-            cancel_resp.status_code,
-        )
+    f"{REGISTRATION_URL}/registration",
+    json={
+        "volunteer_id": volunteer_id,
+        "event_id":     event_id
+    }
+)
+    if cancel_resp.status_code != 200:
+      try:
+          err_data = cancel_resp.json()
+          err_msg = err_data.get("message", cancel_resp.text)
+      except ValueError:
+          err_msg = cancel_resp.text  # fallback if not JSON
+      return jsonify({
+          "code": cancel_resp.status_code,
+          "message": f"Failed to cancel registration: {err_msg}"
+      }), cancel_resp.status_code
 
-    cancelled_data = cancel_resp.json().get("data", {})
-    email = cancelled_data.get("email", "")
+    # cancelled_data = cancel_resp.json().get("data", {})
+    # email = cancelled_data.get("email", "")
 
     # ── Notify cancellation
     publish_message(
@@ -428,4 +431,4 @@ def health():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5011, debug=False)
+    app.run(host="0.0.0.0", port=5011, debug=True)

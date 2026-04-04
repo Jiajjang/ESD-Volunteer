@@ -1,6 +1,6 @@
 <script>
 import EventsCard from '@/components/eventsCard.vue'
-import NavBar from '@/components/navbar.vue'
+import NavBar from '@/components/navBar.vue'
 import { useVolunteerStore } from '@/stores/volunteer'
 
 export default {
@@ -41,7 +41,7 @@ export default {
     methods: {
         async fetchVolunteer() {
             try {
-                const response = await fetch(`http://localhost:5002/volunteer/${this.volunteerId}`)
+                const response = await fetch(`http://localhost:8000/volunteer/${this.volunteerId}`)
                 if (!response.ok) throw new Error('API failed')
 
                 const data = await response.json()
@@ -58,7 +58,7 @@ export default {
         async fetchVolunteerEvents() {
             try {
                 const response = await fetch(
-                    `http://localhost:5012/get_event_by_volunteer/${this.volunteerId}`,
+                    `http://localhost:8000/get_event_by_volunteer/${this.volunteerId}`,
                 )
                 if (!response.ok) throw new Error('API failed')
 
