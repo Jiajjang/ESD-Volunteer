@@ -64,6 +64,7 @@ def get_event_by_volunteer(volunteer_id):
 
     for reg in registrations:
         event_id = reg.get("event_id")
+        registration_id = reg.get("registration_id")
         status = reg.get("status")
 
         if not event_id:
@@ -79,6 +80,7 @@ def get_event_by_volunteer(volunteer_id):
         event = events_resp.json().get("data")
         if event:
             event["registration_status"] = status
+            event["registration_id"] = registration_id
             vol_events.append(event)
 
     return jsonify({

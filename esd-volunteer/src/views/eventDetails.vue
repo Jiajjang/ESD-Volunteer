@@ -30,14 +30,20 @@ export default {
 
         currentRegistration() {
             if (!this.currentEventId) return null
-            return this.registeredEvents.find((reg) => reg.event_id === this.currentEventId) || null
-        },
-        currentRegistrationId() {
-        return (
-            this.currentRegistration?.registration_id ||
-            this.currentRegistration?.id ||
-            null
-        )
+
+            const match = this.registeredEvents.find((reg) => {
+                const regEventId = Number(reg.event_id || reg.id)
+                const currentId = Number(this.currentEventId)
+                const isMatch = regEventId === currentId
+                console.log(
+                    `Checking reg.event_id ${regEventId} === current ${currentId}:`,
+                    isMatch,
+                )
+                return isMatch
+            })
+
+            console.log('Final match:', match)
+            return match || null
         },
         eventStatus() {
             return (
@@ -132,12 +138,42 @@ export default {
                 const data = await response.json()
                 const events = data.data.events || []
 
+                console.log('=== RAW API RESPONSE ===')
+                console.log('Raw events:', events)
+                console.log(
+                    'Looking for event_id:',
+                    this.currentEventId,
+                    typeof this.currentEventId,
+                )
+
+                // Log ALL registrations as table
+                console.table(
+                    events.map((reg) => ({
+                        event_id: reg.event_id,
+                        registration_id: reg.registration_id || reg.id,
+                        status: reg.registration_status || reg.status,
+                    })),
+                )
+
                 this.registeredEvents = events.filter((reg) => {
                     const status = (reg.registration_status || reg.status || '')
                         .trim()
                         .toLowerCase()
                     return status !== 'cancelled'
                 })
+
+                console.log('=== FILTERED registeredEvents ===')
+                console.table(
+                    this.registeredEvents.map((reg) => ({
+                        event_id: reg.event_id,
+                        registration_id: reg.registration_id || reg.id,
+                        status: reg.registration_status || reg.status,
+                    })),
+                )
+
+                console.log('currentEventId:', this.currentEventId)
+                console.log('MATCHED registration:', this.currentRegistration)
+                console.log('registration_id:', this.currentRegistration["registration_id"])
             } catch (err) {
                 this.error = err.message
             } finally {
@@ -198,6 +234,7 @@ export default {
         },
         // ---------------- DELETE REGISTRATION
         async deleteRegistration() {
+            console.log(this.currentRegistrationId)
             if (!this.isCurrentEventRegistered || !this.currentEventId) return
 
             this.actionLoading = 'delete'
@@ -210,13 +247,18 @@ export default {
                     body: JSON.stringify({
                         volunteer_id: this.volunteer_id,
                         event_id: this.currentEventId,
-                        registration_id: this.currentRegistrationId
-
+                        registration_id: this.currentRegistration["registration_id"],
                     }),
                 })
 
                 if (!response.ok) throw new Error('Unregistration failed')
-
+                console.log('delete payload', {
+                    volunteer_id: this.volunteer_id,
+                    event_id: this.currentEventId,
+                    registration_id: this.currentRegistrationId,
+                    currentRegistration: this.currentRegistration,
+                    registeredEvents: this.registeredEvents,
+                })
                 await response.json()
                 await this.fetchVolunteerEvents()
 
@@ -238,7 +280,9 @@ export default {
 
     async mounted() {
         try {
-            await Promise.all([this.fetchEvent(), this.fetchVolunteerEvents()])
+            // Fetch event FIRST, then volunteer events
+            await this.fetchEvent()
+            await this.fetchVolunteerEvents()
         } catch (err) {
             this.error = err.message
         } finally {
