@@ -1,0 +1,68 @@
+_format_version: "3.0"
+
+services:
+  - name: event-service
+    url: http://event:5001
+    routes:
+      - name: event-route
+        paths:
+          - /event
+        strip_path: false
+
+  - name: registration-service
+    url: http://registration:5000
+    routes:
+      - name: registration-route
+        paths:
+          - /registration
+        strip_path: false
+
+  - name: volunteer-service
+    url: http://volunteer:5002
+    routes:
+      - name: volunteer-route
+        paths:
+          - /volunteer
+        strip_path: false
+
+  - name: waitlist-service
+    url: http://waitlist:5003
+    routes:
+      - name: waitlist-route
+        paths:
+          - /waitlist
+        strip_path: false
+
+  - name: register-for-event-service
+    url: http://register_for_event:5010
+    routes:
+      - name: register-for-event-route
+        paths:
+          - /register_for_event
+        strip_path: false
+
+  - name: delete-registration-service
+    url: http://delete_registration:5011
+    routes:
+      - name: delete-registration-route
+        paths:
+          - /cancel-registration
+        strip_path: false
+
+  - name: get-event-by-volunteer-service
+    url: http://get_event_by_volunteer:5012
+    routes:
+      - name: get-event-by-volunteer-route
+        paths:
+          - /get_event_by_volunteer
+        strip_path: false
+  
+  - name: organiser
+    url: http://organiser:5004
+    routes:
+      - name: organiser-route
+        paths:
+          - /organiser
+        strip_path: false
+  
+

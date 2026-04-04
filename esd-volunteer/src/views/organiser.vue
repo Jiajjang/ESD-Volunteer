@@ -31,7 +31,7 @@ export default {
     methods: {
         async fetchOrganiser() {
             try {
-                const response = await fetch(`http://localhost:5004/organiser/${this.organiser_id}`)
+                const response = await fetch(`http://localhost:8000/organiser/${this.organiser_id}`)
                 if (!response.ok) throw new Error('Failed to fetch organiser')
 
                 const data = await response.json()
@@ -45,7 +45,7 @@ export default {
         async fetchOrganiserEvents() {
             try {
                 const response = await fetch(
-                    `http://localhost:5001/event/organiser/${this.organiser_id}`
+                    `http://localhost:8000/event/organiser/${this.organiser_id}`
                 )
 
                 if (response.status === 404) {
