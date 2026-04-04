@@ -1,6 +1,6 @@
 <script>
 import EventsCard from '@/components/eventsCard.vue'
-import NavBar from '@/components/navBar.vue'
+import NavBar from '@/components/navbar.vue'
 import { useOrganiserStore } from '@/stores/organiser'
 import { useSessionStore } from '@/stores/currentRole'
 
