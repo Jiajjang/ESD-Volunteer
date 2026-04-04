@@ -41,7 +41,7 @@ export default {
         // FETCH ALL EVENTS THATS NOT CANCELLED
         async fetchEvents() {
             try {
-                const response = await fetch('http://localhost:5001/event')
+                const response = await fetch('http://localhost:8000/event')
                 if (!response.ok) throw new Error('API failed')
 
                 const data = await response.json()
@@ -56,7 +56,7 @@ export default {
 
         async fetchVolunteerEvents() {
             const response = await fetch(
-                `http://localhost:5012/get_event_by_volunteer/${this.volunteer_id}`,
+                `http://localhost:8000/get_event_by_volunteer/${this.volunteer_id}`,
             )
             if (!response.ok) throw new Error('API failed')
 

@@ -15,9 +15,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ── Service URLs ──────────────────────────────────────────────────────────────
-REGISTRATION_URL = os.getenv("REGISTRATION_SERVICE_URL", "http://localhost:5000")
-WAITLIST_URL     = os.getenv("WAITLIST_SERVICE_URL",     "http://localhost:5003")
-EVENT_URL        = os.getenv("EVENT_SERVICE_URL",        "http://localhost:5001")
+REGISTRATION_URL = os.getenv("REGISTRATION_SERVICE_URL", "http://registration:5000")
+WAITLIST_URL     = os.getenv("WAITLIST_SERVICE_URL",     "http://waitlist:5003")
+EVENT_URL        = os.getenv("EVENT_SERVICE_URL",        "http://event:5001")
 
 # ── RabbitMQ ──────────────────────────────────────────────────────────────────
 RABBITMQ_HOST  = os.getenv("RABBITMQ_HOST",  "active-white-bear-01.rmq6.cloudamqp.com")

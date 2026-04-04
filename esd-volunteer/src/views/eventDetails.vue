@@ -110,7 +110,7 @@ export default {
         },
 
         async fetchEvent() {
-            const response = await fetch(`http://localhost:5001/event/${this.$route.params.id}`)
+            const response = await fetch(`http://localhost:8000/event/${this.$route.params.id}`)
             if (!response.ok) throw new Error('API failed')
             const data = await response.json()
             this.event = data.data
@@ -120,7 +120,7 @@ export default {
         async fetchVolunteerEvents() {
             try {
                 const response = await fetch(
-                    `http://localhost:5012/get_event_by_volunteer/${this.volunteer_id}`,
+                    `http://localhost:8000/get_event_by_volunteer/${this.volunteer_id}`,
                 )
                 if (!response.ok) throw new Error('API failed')
 
@@ -150,7 +150,7 @@ export default {
             this.error = null
 
             try {
-                const response = await fetch('http://localhost:5010/register_for_event', {
+                const response = await fetch('http://localhost:8000/register_for_event', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -199,7 +199,7 @@ export default {
             this.registrationSuccess = false
             this.successMessage = ''
             try {
-                const response = await fetch('http://localhost:5011/cancel-registration', {
+                const response = await fetch('http://localhost:8000/cancel-registration', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
