@@ -1,6 +1,6 @@
 <script>
 import EventsCard from '@/components/eventsCard.vue'
-import NavBar from '@/components/navbar.vue'
+import NavBar from '@/components/navBar.vue'
 import { useVolunteerStore } from '@/stores/volunteer'
 
 export default {
