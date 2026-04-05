@@ -234,7 +234,7 @@ def update_capacity(event_id):
     
 
 #Scenario 3 Cancel Event (RabbitMQ Fanout)
-@app.route("/event/<int:event_id>", methods=['DELETE'])
+@app.route("/event/delete/<int:event_id>", methods=['DELETE'])
 def delete_event(event_id):
     """Cancel an event and notify all services via RabbitMQ
     ---

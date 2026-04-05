@@ -26,6 +26,19 @@ export default {
         organiser_id() {
             return useOrganiserStore().organiserId
         },
+        eventStatusClass() {
+            const status = (this.eventStatus || '').trim().toLowerCase()
+
+            if (status === 'active') return 'badge badge-success'
+            if (status === 'cancelled') return 'badge badge-error'
+            if (status === 'completed') return 'badge badge-info'
+            return 'badge badge-neutral'
+        },
+        formattedEventStatus() {
+            return this.eventStatus
+                ? this.eventStatus.charAt(0).toUpperCase() + this.eventStatus.slice(1)
+                : 'Unknown'
+        },
     },
 
     methods: {
@@ -45,7 +58,7 @@ export default {
         async fetchOrganiserEvents() {
             try {
                 const response = await fetch(
-                    `http://localhost:8000/event/organiser/${this.organiser_id}`
+                    `http://localhost:8000/event/organiser/${this.organiser_id}`,
                 )
 
                 if (response.status === 404) {
@@ -170,7 +183,8 @@ export default {
                             :key="event.event_id"
                             :event="event"
                             buttonText="View Event"
-                            :eventStatus="event.registration_status"
+                            :eventStatus="event.status"
+                            :eventStatusClass="eventStatusClass"
                             :isRegistered="true"
                         />
                     </div>

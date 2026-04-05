@@ -1,22 +1,42 @@
 <script>
 import { useSessionStore } from '@/stores/currentRole'
+import { useVolunteerStore } from '@/stores/volunteer'
+import { useOrganiserStore } from '@/stores/organiser'
 
 export default {
     name: 'LoginTabs',
     data() {
         return {
             activeTab: 'volunteer',
+            volunteerIdInput: null,
+            organiserIdInput: null,
         }
     },
     methods: {
         setVolunteer() {
             const sessionStore = useSessionStore()
+            const volunteerStore = useVolunteerStore()
+
+            if (volunteerStore.setVolunteerId) {
+                volunteerStore.setVolunteerId(Number(this.volunteerIdInput))
+            } else {
+                volunteerStore.volunteerId = Number(this.volunteerIdInput)
+            }
+
             sessionStore.setRole('volunteer')
             this.$router.push('/volunteer')
         },
 
         setOrganiser() {
             const sessionStore = useSessionStore()
+            const organiserStore = useOrganiserStore()
+
+            if (organiserStore.setOrganiserId) {
+                organiserStore.setOrganiserId(Number(this.organiserIdInput))
+            } else {
+                organiserStore.organiserId = Number(this.organiserIdInput)
+            }
+
             sessionStore.setRole('organiser')
             this.$router.push('/organiser')
         },
@@ -71,6 +91,20 @@ export default {
 
             <form v-if="activeTab === 'volunteer'" class="space-y-4" @submit.prevent>
                 <div class="form-control">
+                    <label for="volunteer-id" class="label">
+                        <span class="label-text font-semibold text-base-content">Volunteer ID</span>
+                    </label>
+                    <input
+                        id="volunteer-id"
+                        v-model.number="volunteerIdInput"
+                        type="number"
+                        min="1"
+                        placeholder="Enter volunteer ID"
+                        class="input input-bordered w-full rounded-xl bg-white focus:border-green-600 focus:outline-none"
+                    />
+                </div>
+
+                <div class="form-control">
                     <label for="vol-email" class="label">
                         <span class="label-text font-semibold text-base-content">Email</span>
                     </label>
@@ -104,6 +138,20 @@ export default {
             </form>
 
             <form v-else class="space-y-4" @submit.prevent>
+                <div class="form-control">
+                    <label for="organiser-id" class="label">
+                        <span class="label-text font-semibold text-base-content">Organiser ID</span>
+                    </label>
+                    <input
+                        id="organiser-id"
+                        v-model.number="organiserIdInput"
+                        type="number"
+                        min="1"
+                        placeholder="Enter organiser ID"
+                        class="input input-bordered w-full rounded-xl bg-white focus:border-blue-600 focus:outline-none"
+                    />
+                </div>
+
                 <div class="form-control">
                     <label for="org-email" class="label">
                         <span class="label-text font-semibold text-base-content">Email</span>

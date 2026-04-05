@@ -9,4 +9,5 @@ export const useSessionStore = defineStore('session', {
             this.currentRole = role
         },
     },
+    
 })

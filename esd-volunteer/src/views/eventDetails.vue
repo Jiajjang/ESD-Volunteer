@@ -106,6 +106,11 @@ export default {
             if (this.isCurrentEventRegistered) return 'btn-success'
             return 'btn-primary'
         },
+
+        isEventCancelled() {
+            const status = (this.event?.status || '').trim().toLowerCase()
+            return status === 'cancelled'
+        },
     },
 
     methods: {
@@ -146,15 +151,6 @@ export default {
                     typeof this.currentEventId,
                 )
 
-                // Log ALL registrations as table
-                console.table(
-                    events.map((reg) => ({
-                        event_id: reg.event_id,
-                        registration_id: reg.registration_id || reg.id,
-                        status: reg.registration_status || reg.status,
-                    })),
-                )
-
                 this.registeredEvents = events.filter((reg) => {
                     const status = (reg.registration_status || reg.status || '')
                         .trim()
@@ -162,18 +158,9 @@ export default {
                     return status !== 'cancelled'
                 })
 
-                console.log('=== FILTERED registeredEvents ===')
-                console.table(
-                    this.registeredEvents.map((reg) => ({
-                        event_id: reg.event_id,
-                        registration_id: reg.registration_id || reg.id,
-                        status: reg.registration_status || reg.status,
-                    })),
-                )
-
                 console.log('currentEventId:', this.currentEventId)
                 console.log('MATCHED registration:', this.currentRegistration)
-                console.log('registration_id:', this.currentRegistration["registration_id"])
+                console.log('registration_id:', this.currentRegistration['registration_id'])
             } catch (err) {
                 this.error = err.message
             } finally {
@@ -247,7 +234,7 @@ export default {
                     body: JSON.stringify({
                         volunteer_id: this.volunteer_id,
                         event_id: this.currentEventId,
-                        registration_id: this.currentRegistration["registration_id"],
+                        registration_id: this.currentRegistration['registration_id'],
                     }),
                 })
 
@@ -272,6 +259,62 @@ export default {
             } catch (err) {
                 console.error('API Error:', err)
                 this.error = err.message
+            } finally {
+                this.actionLoading = null
+            }
+        },
+        // --------- ORGANISER DELETE EVENT
+        async deleteEvent() {
+            if (!this.currentEventId) return
+            this.actionLoading = 'delete'
+            this.registrationSuccess = false
+            this.successMessage = ''
+            this.error = null
+
+            try {
+                const response = await fetch(
+                    `http://localhost:8000/event/delete/${this.currentEventId}`,
+                    {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                    },
+                )
+
+                const contentType = response.headers.get('content-type') || ''
+                const result = contentType.includes('application/json')
+                    ? await response.json()
+                    : await response.text()
+
+                if (!response.ok) {
+                    const message =
+                        result?.message ||
+                        result?.error ||
+                        (typeof result === 'string'
+                            ? result
+                            : `Delete failed with status ${response.status}`)
+                    throw new Error(message)
+                }
+
+                console.log('delete success', {
+                    event_id: this.currentEventId,
+                    result,
+                })
+
+                this.event.status = 'cancelled'
+                this.successMessage = `Successfully cancelled ${this.event.name}!`
+                this.registrationSuccess = true
+
+                setTimeout(() => {
+                    this.registrationSuccess = false
+                    this.successMessage = ''
+                }, 3000)
+
+                this.$router.push('/organiser')
+            } catch (err) {
+                console.error('API Error:', err)
+                this.error = err.message || 'Failed to cancel event'
             } finally {
                 this.actionLoading = null
             }
@@ -361,24 +404,35 @@ export default {
 
                     <!-- Organiser actions -->
                     <template v-else>
-                        <div class="flex flex-row flex-wrap w-full gap-4">
+                        <button
+                            v-if="isEventCancelled"
+                            class="w-full rounded-lg btn btn-neutral"
+                            disabled
+                        >
+                            Event Cancelled
+                        </button>
+
+                        <div v-else class="flex flex-row flex-wrap w-full gap-4">
                             <button
                                 class="w-full rounded-lg btn btn-outline btn-info flex-1/3 grow"
-                                @click="editEvent"
                             >
                                 Edit Event
                             </button>
-                            <button
-                                class="w-full rounded-lg btn btn-outline flex-1/3 grow"
-                                @click="viewRegistrations"
-                            >
+
+                            <button class="w-full rounded-lg btn btn-outline flex-1/3 grow">
                                 View Registrations
                             </button>
+
                             <button
                                 class="w-full rounded-lg btn btn-error btn-outline"
+                                :disabled="actionLoading === 'delete'"
                                 @click="deleteEvent"
                             >
-                                Delete Event
+                                {{
+                                    actionLoading === 'delete'
+                                        ? 'Cancelling Event...'
+                                        : 'Delete Event'
+                                }}
                             </button>
                         </div>
                     </template>
