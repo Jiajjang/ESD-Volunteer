@@ -103,25 +103,32 @@ def cancel_registration():
     event_details = get_event_details(event_id)
 
     # ── Cancel registration (update status to cancelled, keep record)
-    logger.info(f'[Step 2] Cancelling registration for volunteer_id={volunteer_id}, event_id={event_id}')
+    logger.info(
+        f"[Step 2] Cancelling registration for volunteer_id={volunteer_id}, event_id={event_id}"
+    )
     cancel_resp = requests.put(
         f"{REGISTRATION_URL}/registration/status",
         json={
             "volunteer_id": volunteer_id,
-            "event_id":     event_id,
-            "status":       "cancelled"
-        }
+            "event_id": event_id,
+            "status": "cancelled",
+        },
     )
     if cancel_resp.status_code != 200:
-      try:
-          err_data = cancel_resp.json()
-          err_msg = err_data.get("message", cancel_resp.text)
-      except ValueError:
-          err_msg = cancel_resp.text  # fallback if not JSON
-      return jsonify({
-          "code": cancel_resp.status_code,
-          "message": f"Failed to cancel registration: {err_msg}"
-      }), cancel_resp.status_code
+        try:
+            err_data = cancel_resp.json()
+            err_msg = err_data.get("message", cancel_resp.text)
+        except ValueError:
+            err_msg = cancel_resp.text  # fallback if not JSON
+        return (
+            jsonify(
+                {
+                    "code": cancel_resp.status_code,
+                    "message": f"Failed to cancel registration: {err_msg}",
+                }
+            ),
+            cancel_resp.status_code,
+        )
 
     cancelled_data = cancel_resp.json().get("data", {})
     email = cancelled_data.get("email", "")
@@ -155,7 +162,7 @@ def cancel_registration():
         capacity_data = {}
         try:
             capacity_resp = requests.put(
-                f"{EVENT_URL}/event/capacity",
+                f"{EVENT_URL}/event/{event_id}/capacity",
                 json={"event_id": event_id, "action": "decrement"},
             )
             capacity_data = capacity_resp.json().get("data", {})
@@ -306,6 +313,134 @@ def respond_to_promotion():
             jsonify({"code": 500, "message": "Failed to update registration status"}),
             500,
         )
+    if status == "rejected":
+        waitlist_resp = requests.get(f"{WAITLIST_URL}/waitlist/{event_id}/next")
+    next_entry = (
+        waitlist_resp.json().get("data") if waitlist_resp.status_code == 200 else None
+    )
+    promoted_volunteer_id = next_entry.get("volunteer_id") if next_entry else None
+    cancel_resp = requests.put(
+        f"{REGISTRATION_URL}/registration/status",
+        json={
+            "volunteer_id": volunteer_id,
+            "event_id": event_id,
+            "status": "cancelled",
+        },
+    )
+    if cancel_resp.status_code != 200:
+        try:
+            err_data = cancel_resp.json()
+            err_msg = err_data.get("message", cancel_resp.text)
+        except ValueError:
+            err_msg = cancel_resp.text  # fallback if not JSON
+        return (
+            jsonify(
+                {
+                    "code": cancel_resp.status_code,
+                    "message": f"Failed to cancel registration: {err_msg}",
+                }
+            ),
+            cancel_resp.status_code,
+        )
+
+    cancelled_data = cancel_resp.json().get("data", {})
+    email = cancelled_data.get("email", "")
+
+    # ── If no one in waitlist → decrement capacity
+    if not promoted_volunteer_id:
+        logger.info(
+            f"[Step 7L] Queue empty — decrementing capacity for event_id={event_id}"
+        )
+        capacity_data = {}
+        try:
+            capacity_resp = requests.put(
+                f"{EVENT_URL}/event/{event_id}/capacity",
+                json={"event_id": event_id, "action": "decrement"},
+            )
+            capacity_data = capacity_resp.json().get("data", {})
+        except Exception as e:
+            logger.warning(f"[Step 7L] Event Service error (non-fatal): {e}")
+
+        return (
+            jsonify(
+                {
+                    "code": 200,
+                    "message": "Cancelled. No one in waitlist. Capacity decremented.",
+                    "data": {
+                        "cancelledVolunteer": cancelled_data,
+                        "promotedVolunteerID": None,
+                        "capacity": capacity_data,
+                    },
+                }
+            ),
+            200,
+        )
+
+    # ── Promote waitlisted volunteer → pending
+    expires_at = (datetime.now(sg_tz) + timedelta(hours=24)).strftime(
+        "%Y-%m-%d %H:%M:%S%z"
+    )
+    logger.info(
+        f"[Step 7] Promoting volunteer_id={promoted_volunteer_id} to PENDING until {expires_at}"
+    )
+    promote_resp = requests.put(
+        f"{REGISTRATION_URL}/registration/status",
+        json={
+            "volunteer_id": promoted_volunteer_id,
+            "event_id": event_id,
+            "status": "pending",
+            "expires_at": expires_at,
+        },
+    )
+
+    if promote_resp.status_code != 200:
+        return (
+            jsonify(
+                {
+                    "code": 500,
+                    "message": "Cancelled volunteer but failed to promote next in waitlist",
+                    "data": {
+                        "cancelledVolunteer": cancelled_data,
+                        "waitlistEntry": next_entry,
+                    },
+                }
+            ),
+            500,
+        )
+
+    promoted_data = promote_resp.json().get("data", {})
+    promoted_email = promoted_data.get("email", "")
+
+    # ── Notify promotion
+    publish_message(
+        "registration.pending",
+        {
+            "event_id": event_id,
+            "event_name": event_details["event_name"],
+            "start_date": event_details["start_date"],
+            "end_date": event_details["end_date"],
+            "location": event_details["location"],
+            "status": "pending",
+            "email": promoted_email,
+            "expires_at": expires_at,
+        },
+    )
+
+    return (
+        jsonify(
+            {
+                "code": 200,
+                "message": f"Volunteer {volunteer_id} cancelled. Volunteer {promoted_volunteer_id} promoted to PENDING.",
+                "data": {
+                    "cancelledVolunteer": cancelled_data,
+                    "promotedVolunteerID": promoted_volunteer_id,
+                    "promotedVolunteer": promoted_data,
+                    "expires_at": expires_at,
+                },
+            }
+        ),
+        200,
+    )
 
     email = update_resp.json().get("data", {}).get("email", "")
 

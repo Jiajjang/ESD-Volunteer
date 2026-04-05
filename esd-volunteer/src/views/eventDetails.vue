@@ -336,6 +336,55 @@ export default {
                 this.actionLoading = null
             }
         },
+        // --------------- Waitlist
+        async respondToPromotion(volunteerId, eventId, status) {
+            // Validate inputs (matches backend schema)
+            if (!volunteerId || !eventId || !['confirmed', 'rejected'].includes(status)) {
+                throw new Error(
+                    'Invalid volunteer_id, event_id, or status. Status must be "confirmed" or "rejected"',
+                )
+            }
+
+            const requestOptions = {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    volunteer_id: volunteerId,
+                    event_id: eventId,
+                    status: status,
+                }),
+            }
+
+            try {
+                const response = await fetch(
+                    `http://localhost:8000/cancel-registration/respond`,
+                    requestOptions,
+                )
+
+                const contentType = response.headers.get('content-type') || ''
+                const isJson = contentType.includes('application/json')
+                const data = isJson ? await response.json() : await response.text()
+
+                if (!response.ok) {
+                    const error = (data && data.message) || data || response.statusText
+                    throw new Error(`Failed to respond: ${error}`)
+                }
+
+                return {
+                    success: true,
+                    message: data.message || 'Registration status updated',
+                    data,
+                }
+            } catch (error) {
+                console.error('Respond to promotion error:', error)
+                return {
+                    success: false,
+                    error: error.message || 'Network or server error',
+                }
+            }
+        },
     },
 
     async mounted() {
@@ -417,6 +466,24 @@ export default {
                         >
                             {{ actionLoading === 'delete' ? 'Unregistering...' : 'Unregister' }}
                         </button>
+                        <div v-if="eventStatus == 'pending'" class="flex flex-row gap-2">
+                            <button
+                                class="btn btn-primary"
+                                @click="
+                                    respondToPromotion(volunteer_id, currentEventId, 'confirmed')
+                                "
+                            >
+                                Accept Registration
+                            </button>
+                            <button
+                                class="btn btn-outline btn-accent"
+                                @click="
+                                    respondToPromotion(volunteer_id, currentEventId, 'rejected')
+                                "
+                            >
+                                Reject Registration
+                            </button>
+                        </div>
                     </template>
 
                     <!-- Organiser actions -->
