@@ -20,6 +20,7 @@ export default {
             actionLoading: null,
             successMessage: '',
             alertClass: 'alert-success',
+            deleteReason: '',
         }
     },
 
@@ -219,7 +220,7 @@ export default {
                 this.actionLoading = null
             }
         },
-        // ---------------- DELETE REGISTRATION
+        // ----------------VOLUNTEER CANCEL REGISTRATION
         async deleteRegistration() {
             console.log(this.currentRegistrationId)
             if (!this.isCurrentEventRegistered || !this.currentEventId) return
@@ -264,8 +265,18 @@ export default {
             }
         },
         // --------- ORGANISER DELETE EVENT
+        openDeleteModal() {
+            this.deleteReason = ''
+            this.$refs.deleteModal?.showModal()
+        },
+
         async deleteEvent() {
             if (!this.currentEventId) return
+            if (!this.deleteReason?.trim()) {
+                this.error = 'Please provide a reason'
+                return
+            }
+
             this.actionLoading = 'delete'
             this.registrationSuccess = false
             this.successMessage = ''
@@ -279,6 +290,9 @@ export default {
                         headers: {
                             'Content-Type': 'application/json',
                         },
+                        body: JSON.stringify({
+                            reason: this.deleteReason.trim(),
+                        }),
                     },
                 )
 
@@ -305,6 +319,9 @@ export default {
                 this.event.status = 'cancelled'
                 this.successMessage = `Successfully cancelled ${this.event.name}!`
                 this.registrationSuccess = true
+
+                this.deleteReason = ''
+                this.$refs.deleteModal?.close()
 
                 setTimeout(() => {
                     this.registrationSuccess = false
@@ -426,15 +443,53 @@ export default {
                             <button
                                 class="w-full rounded-lg btn btn-error btn-outline"
                                 :disabled="actionLoading === 'delete'"
-                                @click="deleteEvent"
+                                @click="openDeleteModal"
                             >
-                                {{
-                                    actionLoading === 'delete'
-                                        ? 'Cancelling Event...'
-                                        : 'Delete Event'
-                                }}
+                                Delete Event
                             </button>
                         </div>
+
+                        <dialog ref="deleteModal" class="modal">
+                            <div class="modal-box">
+                                <h3 class="text-lg font-bold">Delete event?</h3>
+                                <p class="py-2 text-sm text-base-content/70">
+                                    Please provide a reason before deleting this event.
+                                </p>
+
+                                <div class="form-control w-full">
+                                    <textarea
+                                        v-model="deleteReason"
+                                        class="textarea textarea-bordered w-full"
+                                        placeholder="Enter reason for deleting this event"
+                                        rows="4"
+                                    ></textarea>
+                                </div>
+
+                                <div class="modal-action">
+                                    <form method="dialog">
+                                        <button class="btn">Close</button>
+                                    </form>
+
+                                    <button
+                                        class="btn btn-error"
+                                        :disabled="
+                                            actionLoading === 'delete' || !deleteReason.trim()
+                                        "
+                                        @click="deleteEvent"
+                                    >
+                                        {{
+                                            actionLoading === 'delete'
+                                                ? 'Cancelling Event...'
+                                                : 'Delete Event'
+                                        }}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <form method="dialog" class="modal-backdrop">
+                                <button>close</button>
+                            </form>
+                        </dialog>
                     </template>
                 </div>
             </div>
