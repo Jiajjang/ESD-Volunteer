@@ -80,55 +80,37 @@ def get_event_details(event_id: int) -> dict:
     return {"event_name": "", "start_date": "", "end_date": "", "location": ""}
 
 
-# ── POST /cancel-registration ─────────────────────────────────────────────────
-@app.route("/cancel-registration", methods=["POST"])
-def cancel_registration():
-    data = request.get_json()
-    volunteer_id = data.get("volunteer_id")
-    event_id = data.get("event_id")
-    registration_id = data.get("registration_id")
+# -- Helper function for cancel-registration/reject waitlist
+def _handle_cancellation(volunteer_id, event_id, registration_id):
+    """Handles cancellation + waitlist promotion logic. Returns cancelled_data and promotion info."""
 
     if not volunteer_id or not event_id or not registration_id:
-        return (
-            jsonify(
-                {
-                    "code": 400,
-                    "message": "volunteer_id, event_id, registration_id required",
-                }
-            ),
-            400,
-        )
+        raise ValueError("volunteer_id, event_id, and registration_id are required")
 
     # ── Fetch event details
     event_details = get_event_details(event_id)
 
-    # ── Cancel registration (update status to cancelled, keep record)
+    # ── Cancel registration
     logger.info(
-        f"[Step 2] Cancelling registration for volunteer_id={volunteer_id}, event_id={event_id}"
+        f"[Cancel] Cancelling registration_id={registration_id} for volunteer_id={volunteer_id}, event_id={event_id}"
     )
     cancel_resp = requests.put(
         f"{REGISTRATION_URL}/registration/status",
         json={
+            "registration_id": registration_id,
             "volunteer_id": volunteer_id,
             "event_id": event_id,
             "status": "cancelled",
         },
     )
+
     if cancel_resp.status_code != 200:
         try:
             err_data = cancel_resp.json()
             err_msg = err_data.get("message", cancel_resp.text)
         except ValueError:
-            err_msg = cancel_resp.text  # fallback if not JSON
-        return (
-            jsonify(
-                {
-                    "code": cancel_resp.status_code,
-                    "message": f"Failed to cancel registration: {err_msg}",
-                }
-            ),
-            cancel_resp.status_code,
-        )
+            err_msg = cancel_resp.text
+        raise Exception(f"Failed to cancel registration: {err_msg}")
 
     cancelled_data = cancel_resp.json().get("data", {})
     email = cancelled_data.get("email", "")
@@ -154,7 +136,7 @@ def cancel_registration():
     )
     promoted_volunteer_id = next_entry.get("volunteer_id") if next_entry else None
 
-    # ── If no one in waitlist → decrement capacity
+    # ── Handle waitlist promotion or capacity decrement
     if not promoted_volunteer_id:
         logger.info(
             f"[Step 7L] Queue empty — decrementing capacity for event_id={event_id}"
@@ -169,28 +151,21 @@ def cancel_registration():
         except Exception as e:
             logger.warning(f"[Step 7L] Event Service error (non-fatal): {e}")
 
-        return (
-            jsonify(
-                {
-                    "code": 200,
-                    "message": "Cancelled. No one in waitlist. Capacity decremented.",
-                    "data": {
-                        "cancelledVolunteer": cancelled_data,
-                        "promotedVolunteerID": None,
-                        "capacity": capacity_data,
-                    },
-                }
-            ),
-            200,
-        )
+        return {
+            "cancelled_data": cancelled_data,
+            "promoted_volunteer_id": None,
+            "capacity_data": capacity_data,
+            "needs_promotion": False,
+        }
 
-    # ── Promote waitlisted volunteer → pending
+    # ── Promote next volunteer
     expires_at = (datetime.now(sg_tz) + timedelta(hours=24)).strftime(
         "%Y-%m-%d %H:%M:%S%z"
     )
     logger.info(
         f"[Step 7] Promoting volunteer_id={promoted_volunteer_id} to PENDING until {expires_at}"
     )
+
     promote_resp = requests.put(
         f"{REGISTRATION_URL}/registration/status",
         json={
@@ -202,19 +177,7 @@ def cancel_registration():
     )
 
     if promote_resp.status_code != 200:
-        return (
-            jsonify(
-                {
-                    "code": 500,
-                    "message": "Cancelled volunteer but failed to promote next in waitlist",
-                    "data": {
-                        "cancelledVolunteer": cancelled_data,
-                        "waitlistEntry": next_entry,
-                    },
-                }
-            ),
-            500,
-        )
+        raise Exception("Failed to promote next waitlist volunteer")
 
     promoted_data = promote_resp.json().get("data", {})
     promoted_email = promoted_data.get("email", "")
@@ -234,78 +197,100 @@ def cancel_registration():
         },
     )
 
-    return (
-        jsonify(
-            {
-                "code": 200,
-                "message": f"Volunteer {volunteer_id} cancelled. Volunteer {promoted_volunteer_id} promoted to PENDING.",
-                "data": {
-                    "cancelledVolunteer": cancelled_data,
-                    "promotedVolunteerID": promoted_volunteer_id,
-                    "promotedVolunteer": promoted_data,
-                    "expires_at": expires_at,
-                },
-            }
-        ),
-        200,
-    )
+    return {
+        "cancelled_data": cancelled_data,
+        "promoted_volunteer_id": promoted_volunteer_id,
+        "promoted_data": promoted_data,
+        "expires_at": expires_at,
+        "needs_promotion": True,
+    }
+
+
+# ── POST /cancel-registration ─────────────────────────────────────────────────
+@app.route("/cancel-registration", methods=["POST"])
+def cancel_registration():
+    data = request.get_json()
+    volunteer_id = data.get("volunteer_id")
+    event_id = data.get("event_id")
+    registration_id = data.get("registration_id")
+
+    if not volunteer_id or not event_id or not registration_id:
+        return (
+            jsonify(
+                {
+                    "code": 400,
+                    "message": "volunteer_id, event_id, registration_id required",
+                }
+            ),
+            400,
+        )
+
+    try:
+        result = _handle_cancellation(volunteer_id, event_id, registration_id)
+
+        if not result["needs_promotion"]:
+            return (
+                jsonify(
+                    {
+                        "code": 200,
+                        "message": "Cancelled. No one in waitlist. Capacity decremented.",
+                        "data": {
+                            "cancelledVolunteer": result["cancelled_data"],
+                            "promotedVolunteerID": None,
+                            "capacity": result["capacity_data"],
+                        },
+                    }
+                ),
+                200,
+            )
+
+        return (
+            jsonify(
+                {
+                    "code": 200,
+                    "message": f"Volunteer {volunteer_id} cancelled. Volunteer {result['promoted_volunteer_id']} promoted to PENDING.",
+                    "data": {
+                        "cancelledVolunteer": result["cancelled_data"],
+                        "promotedVolunteerID": result["promoted_volunteer_id"],
+                        "promotedVolunteer": result["promoted_data"],
+                        "expires_at": result["expires_at"],
+                    },
+                }
+            ),
+            200,
+        )
+
+    except Exception as e:
+        return jsonify({"code": 500, "message": str(e)}), 500
 
 
 # ── PUT /cancel-registration/respond ─────────────────────────────────────────
 @app.route("/cancel-registration/respond", methods=["PUT"])
 def respond_to_promotion():
-    """Respond to a waitlist promotion
-    ---
-    tags:
-      - Cancel Registration
-    parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          required:
-            - volunteer_id
-            - event_id
-            - status
-          properties:
-            volunteer_id:
-              type: integer
-              example: 99
-            event_id:
-              type: integer
-              example: 3
-            status:
-              type: string
-              enum: [confirmed, rejected]
-              example: confirmed
-    responses:
-      200:
-        description: Registration status updated
-      400:
-        description: Invalid fields
-      500:
-        description: Failed to update status
-    """
-
     data = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id = data.get("event_id")
+    registration_id = data.get("registration_id")
     status = data.get("status", "").lower()
 
-    if not volunteer_id or not event_id or status not in ("confirmed", "rejected"):
+    if not volunteer_id or not event_id or not registration_id or status not in ("confirmed", "rejected"):
         return (
             jsonify(
-                {"code": 400, "message": "Invalid volunteer_id, event_id, or status"}
+                {"code": 400, "message": "Invalid volunteer_id, event_id, registration_id or status"}
             ),
             400,
         )
 
+    # First update status to confirmed/rejected
     event_details = get_event_details(event_id)
-
     update_resp = requests.put(
         f"{REGISTRATION_URL}/registration/status",
-        json={"volunteer_id": volunteer_id, "event_id": event_id, "status": status},
+        json={
+            "registration_id": registration_id,
+            "volunteer_id": volunteer_id,
+            "event_id": event_id,
+            "status": status,
+        },
     )
 
     if update_resp.status_code != 200:
@@ -313,137 +298,48 @@ def respond_to_promotion():
             jsonify({"code": 500, "message": "Failed to update registration status"}),
             500,
         )
+
+    # If rejected, trigger full cancellation flow
     if status == "rejected":
-        waitlist_resp = requests.get(f"{WAITLIST_URL}/waitlist/{event_id}/next")
-    next_entry = (
-        waitlist_resp.json().get("data") if waitlist_resp.status_code == 200 else None
-    )
-    promoted_volunteer_id = next_entry.get("volunteer_id") if next_entry else None
-    cancel_resp = requests.put(
-        f"{REGISTRATION_URL}/registration/status",
-        json={
-            "volunteer_id": volunteer_id,
-            "event_id": event_id,
-            "status": "cancelled",
-        },
-    )
-    if cancel_resp.status_code != 200:
         try:
-            err_data = cancel_resp.json()
-            err_msg = err_data.get("message", cancel_resp.text)
-        except ValueError:
-            err_msg = cancel_resp.text  # fallback if not JSON
-        return (
-            jsonify(
-                {
-                    "code": cancel_resp.status_code,
-                    "message": f"Failed to cancel registration: {err_msg}",
-                }
-            ),
-            cancel_resp.status_code,
-        )
+            result = _handle_cancellation(volunteer_id, event_id, registration_id)
 
-    cancelled_data = cancel_resp.json().get("data", {})
-    email = cancelled_data.get("email", "")
+            if not result["needs_promotion"]:
+                return (
+                    jsonify(
+                        {
+                            "code": 200,
+                            "message": "Registration rejected and cancelled. No one in waitlist. Capacity decremented.",
+                            "data": {
+                                "cancelledVolunteer": result["cancelled_data"],
+                                "promotedVolunteerID": None,
+                                "capacity": result["capacity_data"],
+                            },
+                        }
+                    ),
+                    200,
+                )
 
-    # ── If no one in waitlist → decrement capacity
-    if not promoted_volunteer_id:
-        logger.info(
-            f"[Step 7L] Queue empty — decrementing capacity for event_id={event_id}"
-        )
-        capacity_data = {}
-        try:
-            capacity_resp = requests.put(
-                f"{EVENT_URL}/event/{event_id}/capacity",
-                json={"event_id": event_id, "action": "decrement"},
+            return (
+                jsonify(
+                    {
+                        "code": 200,
+                        "message": f"Registration rejected and cancelled. Volunteer {result['promoted_volunteer_id']} promoted to PENDING.",
+                        "data": {
+                            "cancelledVolunteer": result["cancelled_data"],
+                            "promotedVolunteerID": result["promoted_volunteer_id"],
+                            "promotedVolunteer": result["promoted_data"],
+                            "expires_at": result["expires_at"],
+                        },
+                    }
+                ),
+                200,
             )
-            capacity_data = capacity_resp.json().get("data", {})
         except Exception as e:
-            logger.warning(f"[Step 7L] Event Service error (non-fatal): {e}")
+            return jsonify({"code": 500, "message": str(e)}), 500
 
-        return (
-            jsonify(
-                {
-                    "code": 200,
-                    "message": "Cancelled. No one in waitlist. Capacity decremented.",
-                    "data": {
-                        "cancelledVolunteer": cancelled_data,
-                        "promotedVolunteerID": None,
-                        "capacity": capacity_data,
-                    },
-                }
-            ),
-            200,
-        )
-
-    # ── Promote waitlisted volunteer → pending
-    expires_at = (datetime.now(sg_tz) + timedelta(hours=24)).strftime(
-        "%Y-%m-%d %H:%M:%S%z"
-    )
-    logger.info(
-        f"[Step 7] Promoting volunteer_id={promoted_volunteer_id} to PENDING until {expires_at}"
-    )
-    promote_resp = requests.put(
-        f"{REGISTRATION_URL}/registration/status",
-        json={
-            "volunteer_id": promoted_volunteer_id,
-            "event_id": event_id,
-            "status": "pending",
-            "expires_at": expires_at,
-        },
-    )
-
-    if promote_resp.status_code != 200:
-        return (
-            jsonify(
-                {
-                    "code": 500,
-                    "message": "Cancelled volunteer but failed to promote next in waitlist",
-                    "data": {
-                        "cancelledVolunteer": cancelled_data,
-                        "waitlistEntry": next_entry,
-                    },
-                }
-            ),
-            500,
-        )
-
-    promoted_data = promote_resp.json().get("data", {})
-    promoted_email = promoted_data.get("email", "")
-
-    # ── Notify promotion
-    publish_message(
-        "registration.pending",
-        {
-            "event_id": event_id,
-            "event_name": event_details["event_name"],
-            "start_date": event_details["start_date"],
-            "end_date": event_details["end_date"],
-            "location": event_details["location"],
-            "status": "pending",
-            "email": promoted_email,
-            "expires_at": expires_at,
-        },
-    )
-
-    return (
-        jsonify(
-            {
-                "code": 200,
-                "message": f"Volunteer {volunteer_id} cancelled. Volunteer {promoted_volunteer_id} promoted to PENDING.",
-                "data": {
-                    "cancelledVolunteer": cancelled_data,
-                    "promotedVolunteerID": promoted_volunteer_id,
-                    "promotedVolunteer": promoted_data,
-                    "expires_at": expires_at,
-                },
-            }
-        ),
-        200,
-    )
-
+    # Confirmed case - simple notification
     email = update_resp.json().get("data", {}).get("email", "")
-
     publish_message(
         f"registration.{status}",
         {
@@ -499,6 +395,7 @@ def handle_timeout():
     data = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id = data.get("event_id")
+    registration_id = data.get("registration_id")
 
     if not volunteer_id or not event_id:
         return (
