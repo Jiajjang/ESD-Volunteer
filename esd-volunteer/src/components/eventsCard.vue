@@ -22,8 +22,8 @@ export default {
     computed: {
         statusBadgeClass() {
             if (this.eventStatus === 'confirmed') return 'badge badge-success'
-            if (this.eventStatus === 'pending')  return 'badge badge-warning'
-            if (this.eventStatus === 'waitlisted')  return 'badge badge-error'
+            if (this.eventStatus === 'pending') return 'badge badge-warning'
+            if (this.eventStatus === 'waitlisted') return 'badge badge-error'
             return 'badge badge-neutral'
         },
         formattedStatus() {
@@ -31,6 +31,13 @@ export default {
             return this.eventStatus.charAt(0).toUpperCase() + this.eventStatus.slice(1)
         },
         displayButtonText() {
+            return this.isRegistered ? 'View Event' : this.buttonText
+        },
+        isEventCancelled() {
+            return (this.event?.status || '').trim().toLowerCase() === 'cancelled'
+        },
+        displayButtonText() {
+            if (this.isEventCancelled) return 'Event Cancelled'
             return this.isRegistered ? 'View Event' : this.buttonText
         },
     },
@@ -60,7 +67,12 @@ export default {
                 <h2 class="card-title text-xl flex-1">{{ event.name }}</h2>
 
                 <div
-                    v-if="eventStatus && (eventStatus === 'pending' || eventStatus === 'confirmed' || eventStatus === 'waitlisted')"
+                    v-if="
+                        eventStatus &&
+                        (eventStatus === 'pending' ||
+                            eventStatus === 'confirmed' ||
+                            eventStatus === 'waitlisted')
+                    "
                     :class="statusBadgeClass"
                 >
                     {{ formattedStatus }}
@@ -77,7 +89,12 @@ export default {
             </div>
 
             <div class="card-actions justify-end mt-auto">
+                <button v-if="isEventCancelled" class="btn w-full btn-disabled" disabled>
+                    {{ displayButtonText }}
+                </button>
+
                 <router-link
+                    v-else
                     :to="{ name: 'eventDetails', params: { id: event.event_id } }"
                     class="btn w-full"
                     :class="isRegistered ? 'btn-outline btn-secondary' : 'btn-primary'"

@@ -26,19 +26,6 @@ export default {
         organiser_id() {
             return useOrganiserStore().organiserId
         },
-        eventStatusClass() {
-            const status = (this.eventStatus || '').trim().toLowerCase()
-
-            if (status === 'active') return 'badge badge-success'
-            if (status === 'cancelled') return 'badge badge-error'
-            if (status === 'completed') return 'badge badge-info'
-            return 'badge badge-neutral'
-        },
-        formattedEventStatus() {
-            return this.eventStatus
-                ? this.eventStatus.charAt(0).toUpperCase() + this.eventStatus.slice(1)
-                : 'Unknown'
-        },
     },
 
     methods: {
@@ -70,6 +57,7 @@ export default {
 
                 const data = await response.json()
                 this.events = data.data?.events || data.data || []
+                console.log(this.events)
             } catch (err) {
                 console.error('API Error:', err)
                 this.error = err.message
@@ -184,7 +172,6 @@ export default {
                             :event="event"
                             buttonText="View Event"
                             :eventStatus="event.status"
-                            :eventStatusClass="eventStatusClass"
                             :isRegistered="true"
                         />
                     </div>
