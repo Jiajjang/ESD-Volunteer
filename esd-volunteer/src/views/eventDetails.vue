@@ -340,62 +340,44 @@ export default {
         },
         // --------------- Waitlist
         async respondToPromotion(volunteerId, eventId, status) {
-            if (!volunteerId || !eventId || !['confirmed', 'rejected'].includes(status)) {
-                this.promotionError =
-                    'Invalid volunteer_id, event_id, or status. Status must be "confirmed" or "rejected"'
-                return
-            }
+    if (!volunteerId || !eventId || !['confirmed', 'rejected'].includes(status)) {
+        this.error = 'Invalid promotion parameters'
+        return
+    }
 
-            this.promotionLoading = true
-            this.promotionAction = status
-            this.promotionError = null
-            this.promotionSuccess = ''
-
-            const requestOptions = {
+    try {
+        this.actionLoading = `promotion-${status}`
+        const response = await fetch(
+            `http://localhost:8000/cancel-registration/respond`,
+            {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    volunteer_id: volunteerId,
-                    event_id: eventId,
-                    registration_id: this.currentRegistrationId,
-                    status,
-                }),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ volunteer_id: volunteerId, event_id: eventId, status }),
             }
+        )
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.message || 'Failed to respond')
 
-            try {
-                const response = await fetch(
-                    'http://localhost:8000/cancel-registration/respond',
-                    requestOptions,
-                )
+        // Update local registration state
+        const reg = this.registeredEvents.find(r => r.volunteer_id === volunteerId)
+        if (reg) reg.registration_status = status
 
-                const contentType = response.headers.get('content-type') || ''
-                const isJson = contentType.includes('application/json')
-                const data = isJson ? await response.json() : await response.text()
+        // Show success message
+        this.successMessage = `Volunteer ${status === 'confirmed' ? 'accepted' : 'rejected'} successfully`
+        this.alertClass = status === 'confirmed' ? 'alert-success' : 'alert-error'
+        this.registrationSuccess = true
+        setTimeout(() => {
+            this.registrationSuccess = false
+            this.successMessage = ''
+        }, 3000)
 
-                if (!response.ok) {
-                    const error = (data && data.message) || data || response.statusText
-                    throw new Error(`Failed to respond: ${error}`)
-                }
-
-                this.promotionSuccess = data.message || `Registration ${status}`
-
-                await this.fetchVolunteerEvents()
-
-                setTimeout(() => {
-                    this.promotionSuccess = ''
-                }, 3000)
-
-                return data
-            } catch (error) {
-                console.error('Respond to promotion error:', error)
-                this.promotionError = error.message || 'Network or server error'
-            } finally {
-                this.promotionLoading = false
-                this.promotionAction = null
-            }
-        },
+    } catch (err) {
+        console.error('Respond to promotion error:', err)
+        this.error = err.message || 'Network error'
+    } finally {
+        this.actionLoading = null
+    }
+}
     },
 
     async mounted() {
