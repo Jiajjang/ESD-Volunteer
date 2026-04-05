@@ -18,17 +18,18 @@ swagger = Swagger(app)
 supabase = create_client(os.environ.get('SUPABASE_URL'), os.environ.get('SUPABASE_KEY'))
 
 # --- RabbitMQ Config ---
-RABBITMQ_HOST = os.environ.get('RABBITMQ_HOST', 'localhost')
-RABBITMQ_PORT = int(os.environ.get('RABBITMQ_PORT', 5672))
-RABBITMQ_USER = os.environ.get('RABBITMQ_USER', 'guest')
-RABBITMQ_PASS = os.environ.get('RABBITMQ_PASS', 'guest')
-FANOUT_EXCHANGE = os.environ.get('FANOUT_EXCHANGE', 'G2T7_fanout.exchange')
+RABBITMQ_HOST  = os.getenv("RABBITMQ_HOST", "active-white-bear-01.rmq6.cloudamqp.com")
+RABBITMQ_PORT  = int(os.getenv("RABBITMQ_PORT", 5672))
+RABBITMQ_VHOST = os.getenv("RABBITMQ_VHOST", "ntxsydfp")
+RABBITMQ_USER  = os.getenv("RABBITMQ_USER", "ntxsydfp")
+RABBITMQ_PASS  = os.getenv("RABBITMQ_PASS", "VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9")
+FANOUT_EXCHANGE = os.getenv("FANOUT_EXCHANGE","G2T7_fanout.exchange")
 
 #Helper function for RabbitMQ --------------------
 def publish_event_cancelled(event_id, event_name, start_date, end_date):
     try:
         credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
-        parameters = pika.ConnectionParameters(host=RABBITMQ_HOST, port=RABBITMQ_PORT, credentials=credentials)
+        parameters = pika.ConnectionParameters(host=RABBITMQ_HOST, port=RABBITMQ_PORT, virtual_host=RABBITMQ_VHOST, credentials=credentials)
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
 
@@ -261,7 +262,7 @@ def delete_event(event_id):
       500:
         description: Internal server error
     """
-    
+    print("======== DELETE ROUTE ENTERED ========", flush=True)
     try:
         data = request.get_json(silent=True) or {}
         reason = data.get('reason', 'No reason provided')
