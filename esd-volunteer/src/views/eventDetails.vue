@@ -349,7 +349,10 @@ export default {
             }
 
             try {
-                this.actionLoading = `promotion-${status}`
+                this.promotionLoading = true
+                this.promotionAction = status
+                this.error = null
+                // this.actionLoading = `promotion-${status}`
                 const response = await fetch(`http://localhost:8000/cancel-registration/respond`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
@@ -359,8 +362,8 @@ export default {
                 if (!response.ok) throw new Error(data.message || 'Failed to respond')
 
                 // Update local registration state
-                const reg = this.registeredEvents.find((r) => r.volunteer_id === volunteerId)
-                if (reg) reg.registration_status = status
+                // const reg = this.registeredEvents.find((r) => r.volunteer_id === volunteerId)
+                // if (reg) reg.registration_status = status
 
                 await this.fetchVolunteerEvents()
 
@@ -377,6 +380,7 @@ export default {
                 console.error('Respond to promotion error:', err)
                 this.error = err.message || 'Network error'
             } finally {
+                this.promotionLoading = false
                 this.actionLoading = null
             }
         },
