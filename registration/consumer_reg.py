@@ -54,7 +54,7 @@ def get_connection():
     return pika.BlockingConnection(parameters)
 
 
-def publish_event_cancelled(channel, payload: dict):
+def publish_registrations_purged(channel, payload: dict):
     channel.exchange_declare(
         exchange=TOPIC_EXCHANGE,
         exchange_type=TOPIC_EXCHANGE_TYPE,
@@ -124,7 +124,7 @@ def callback(ch, method, properties, body):
         }
 
         # publish first
-        publish_event_cancelled(ch, outgoing_message)
+        publish_registrations_purged(ch, outgoing_message)
 
         # delete only after publish succeeds
         deleted = delete_registrations_by_event_id(event_id)
