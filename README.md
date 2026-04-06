@@ -16,11 +16,11 @@ ESD Volunteer is a microservices-based event registration platform for volunteer
 ## Architecture At A Glance
 
 ### Core Services
-- `event` (port `5001`): event CRUD-like retrieval, capacity updates, event cancellation publish
 - `registration` (port `5000`): registration lifecycle and status updates
+- `event` (port `5001`): event CRUD-like retrieval, capacity updates, event cancellation publish
 - `volunteer` (port `5002`): volunteer profile and account management
-- `organiser` (port `5004`): organiser profile and account management
 - `waitlist` (port `5003`): queue operations and cancellation-driven queue cleanup
+- `organiser` (port `5004`): organiser profile and account management
 
 ### Composite Services
 - `register_for_event` (port `5010`): confirms or waitlists a volunteer
@@ -28,8 +28,8 @@ ESD Volunteer is a microservices-based event registration platform for volunteer
 - `get_event_by_volunteer` (port `5012`): aggregate volunteer registrations with event details
 
 ### Infrastructure
-- Kong Gateway (`8000` proxy, `8001` admin): routes external traffic to services
-- RabbitMQ (`5672` AMQP, `15672` management): asynchronous messaging
+- Kong Gateway (`8000` proxy): routes external traffic to services
+- RabbitMQ (Cloud AMQP): asynchronous messaging
 - Frontend (`8080`): production-built Vue app served statically
 
 ## Project Structure
@@ -50,16 +50,13 @@ ESD Volunteer is a microservices-based event registration platform for volunteer
 ```
 
 ## Getting Started
-
 ### Prerequisites
-
 - Docker + Docker Compose
 - Node.js 20+ (for local frontend development outside Docker)
 - Python 3.10+ (for local service development outside Docker)
 - Supabase project and credentials
 
 ### 1. Configure Environment Variables
-
 Create a root `.env` file (same folder as `compose.yaml`) with at least:
 
 ```env
@@ -73,24 +70,12 @@ RABBITMQ_USER=your_rabbitmq_user
 RABBITMQ_PASS=your_rabbitmq_password
 ```
 
-Notes:
-- The local `rabbitmq` container is included; configure services consistently to avoid mismatched broker targets.
-
 ### 2. Start Everything (Recommended)
 
 ```bash
 docker compose up --build
 ```
-
-Access points:
-
-- Frontend: `http://localhost:8080`
-- API Gateway: `http://localhost:8000`
-- Kong Admin API: `http://localhost:8001`
-- RabbitMQ Management: `http://localhost:15672`
-
 ### API Routes Overview
-
 - `/event`, `/event/:event_id`, `/event/:event_id/capacity`, `/event/delete/:event_id`
 - `/registration`, `/registration/:event_id`, `/registration/volunteer/:volunteer_id`, `/registration/status`
 - `/volunteer`, `/volunteer/:volunteer_id`

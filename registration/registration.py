@@ -294,45 +294,6 @@ def cancel_registration():
         })
     return jsonify({"code": 400, "message": "User not found"}), 400
     
-# ─── PUT (update to confirmed) ───
-@app.route("/registration", methods=["PUT"])
-def update_registration():
-    """Update registration status to confirmed
-    ---
-    tags:
-      - Registration
-    parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          required:
-            - volunteer_id
-            - event_id
-          properties:
-            volunteer_id:
-              type: integer
-              example: 1
-            event_id:
-              type: integer
-              example: 3
-    responses:
-      200:
-        description: Status updated to confirmed
-      400:
-        description: User not found
-    """
-
-    data = request.get_json()
-    updated = supabase.table("registration")\
-        .update({"status": "confirmed"})\
-        .eq("volunteer_id", data["volunteer_id"])\
-        .eq("event_id", data["event_id"])\
-        .execute()
-    if updated.data:
-        return jsonify({"code": 200, "message": "User status updated successfully", "data": format_registration(updated.data[0])})
-    return jsonify({"code": 400, "message": "User not found"}), 400
 
 # ─── PUT /registration/status (used by composite) ───
 @app.route("/registration/status", methods=["PUT"])
