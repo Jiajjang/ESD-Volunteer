@@ -23,7 +23,7 @@ EVENT_URL        = os.getenv("EVENT_URL",         "http://event:5001")
 
 @app.route("/get_event_by_volunteer/<int:volunteer_id>", methods=["GET"])
 def get_event_by_volunteer(volunteer_id):
-    """Get all events a volunteer is registered for
+    """Get all the event details a volunteer is registered for
     ---
     tags:
       - Event by Volunteer
@@ -58,10 +58,9 @@ def get_event_by_volunteer(volunteer_id):
         registrations = []
     else:
         registrations = registrations_resp.json().get("data", {}).get("Registrations", [])
-
-    registrations = registrations_resp.json().get("data", {}).get("Registrations", [])
     vol_events = []
 
+  # For each event volunteer is registered in, get the event details
     for reg in registrations:
         event_id = reg.get("event_id")
         registration_id = reg.get("registration_id")
