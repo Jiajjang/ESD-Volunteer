@@ -7,15 +7,21 @@ from flask_cors import CORS
 from flasgger import Swagger
 from apscheduler.schedulers.background import BackgroundScheduler
 from supabase import create_client
+from typing import Any, Dict, Optional
 import atexit
 
 # ── Setup ─────────────────────────────────────────────────────────────
 load_dotenv()
+OUTSYSTEMS_URL = os.getenv(
+    "OUTSYSTEMS_URL",
+    "https://personal-vvlakqhw.outsystemscloud.com/Notification/rest/NotificationHandling/ProcessRegistrationNotification"
+)
 sg_tz = pytz.timezone("Asia/Singapore")
 
 app = Flask(__name__)
 CORS(app)
 swagger = Swagger(app)
+
 
 # --- Swagger Configuration ---
 app.config['SWAGGER'] = {
@@ -92,6 +98,54 @@ def publish_message(routing_key: str, message: dict):
 EVENT_URL = os.getenv("EVENT_URL", "http://event:5001")
 WAITLIST_URL = os.getenv("WAITLIST_URL", "http://waitlist:5003")
 
+# ── OutSystems helper ───────────────────────────────────────────────────────────
+def send_single_recipient_notification(
+    event_id: str,
+    event_name: str,
+    start_date: str,
+    end_date: str,
+    location: str,
+    status: str,
+    email: str,
+    expires_at: Optional[str] = None,
+    timeout: int = 10,
+) -> Dict[str, Any]:
+    payload = {
+        "event_id": str(event_id),
+        "event_name": event_name,
+        "start_date": start_date,
+        "end_date": end_date,
+        "location": location,
+        "status": status,
+        "email": email,
+        "expires_at": expires_at or ""
+    }
+
+    try:
+        response = requests.post(
+            OUTSYSTEMS_URL,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=timeout,
+        )
+
+        try:
+            response_data = response.json()
+        except ValueError:
+            response_data = response.text
+
+        return {
+            "ok": response.ok,
+            "status_code": response.status_code,
+            "response": response_data,
+        }
+
+    except requests.RequestException as e:
+        return {
+            "ok": False,
+            "status_code": None,
+            "response": f"Request failed: {e}",
+        }
 
 # ── Event details helper ──────────────────────────────────────────────────────
 def get_event_details(event_id: int) -> dict:
@@ -238,12 +292,16 @@ def cancel_registration():
     promoted_data  = promote_resp.json().get("data", {})
     promoted_email = promoted_data.get("email", "")
 
-    publish_message("registration.pending", {
-        "event_id":   event_id,   "event_name": event_details["event_name"],
-        "start_date": event_details["start_date"], "end_date": event_details["end_date"],
-        "location":   event_details["location"],   "status": "pending",
-        "email":      promoted_email,              "expires_at": expires_at,
-    })
+    send_single_recipient_notification(
+        event_id=event_id,
+        event_name=event_details["event_name"],
+        start_date=event_details["start_date"],
+        end_date=event_details["end_date"],
+        location=event_details["location"],
+        status="pending",
+        email=promoted_email,
+        expires_at=expires_at,
+    )
 
     return jsonify({
         "code": 200,
@@ -362,12 +420,16 @@ def respond_to_promotion():
     promoted_data  = promote_resp.json().get("data", {})
     promoted_email = promoted_data.get("email", "")
 
-    publish_message("registration.pending", {
-        "event_id":   event_id,   "event_name": event_details["event_name"],
-        "start_date": event_details["start_date"], "end_date": event_details["end_date"],
-        "location":   event_details["location"],   "status": "pending",
-        "email":      promoted_email,              "expires_at": expires_at,
-    })
+    send_single_recipient_notification(
+        event_id=event_id,
+        event_name=event_details["event_name"],
+        start_date=event_details["start_date"],
+        end_date=event_details["end_date"],
+        location=event_details["location"],
+        status="pending",
+        email=promoted_email,
+        expires_at=expires_at,
+    )
 
     return jsonify({
         "code": 200,
@@ -454,12 +516,16 @@ def handle_timeout():
     )
     if promote_resp.status_code == 200:
         promoted_email = promote_resp.json().get("data", {}).get("email", "")
-        publish_message("registration.pending", {
-            "event_id":   event_id,   "event_name": event_details["event_name"],
-            "start_date": event_details["start_date"], "end_date": event_details["end_date"],
-            "location":   event_details["location"],   "status": "pending",
-            "email":      promoted_email,              "expires_at": expires_at,
-        })
+        send_single_recipient_notification(
+            event_id=event_id,
+            event_name=event_details["event_name"],
+            start_date=event_details["start_date"],
+            end_date=event_details["end_date"],
+            location=event_details["location"],
+            status="pending",
+            email=promoted_email,
+            expires_at=expires_at,
+        )
 
     logger.info(f"[Timeout] Auto-cancelled volunteer_id={volunteer_id}, promoted volunteer_id={promoted_volunteer_id}")
     return jsonify({"code": 200, "message": "Timed out registration cancelled and next volunteer promoted."}), 200
