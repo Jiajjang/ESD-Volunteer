@@ -102,7 +102,9 @@ export default {
 
         buttonLabel() {
             if (this.actionLoading === 'register') return 'Registering...'
-            if (this.registrationState) return 'Registered'
+            if (['pending', 'confirmed', 'waitlisted'].includes(this.registrationState)) {
+                return 'Registered'
+            }
             return 'Register'
         },
 
@@ -359,6 +361,8 @@ export default {
                 // Update local registration state
                 const reg = this.registeredEvents.find((r) => r.volunteer_id === volunteerId)
                 if (reg) reg.registration_status = status
+
+                await this.fetchVolunteerEvents()
 
                 // Show success message
                 this.successMessage = `Volunteer ${status === 'confirmed' ? 'accepted' : 'rejected'} successfully`
