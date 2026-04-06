@@ -47,6 +47,7 @@ services:
       - name: delete-registration-route
         paths:
           - /cancel-registration
+          - /cancel-waitlist
         strip_path: false
 
   - name: get-event-by-volunteer-service
