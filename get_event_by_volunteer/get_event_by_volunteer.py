@@ -82,10 +82,9 @@ def get_event_by_volunteer(volunteer_id):
         registrations = []
     else:
         registrations = registrations_resp.json().get("data", {}).get("Registrations", [])
-
-    registrations = registrations_resp.json().get("data", {}).get("Registrations", [])
     vol_events = []
 
+  # For each event volunteer is registered in, get the event details
     for reg in registrations:
         event_id = reg.get("event_id")
         registration_id = reg.get("registration_id")

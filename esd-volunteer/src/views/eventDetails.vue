@@ -157,7 +157,7 @@ export default {
                     this.currentEventId,
                     typeof this.currentEventId,
                 )
-
+        // --- Only retrieve volunteer's active events
                 this.registeredEvents = events.filter((reg) => {
                     const status = (reg.registration_status || reg.status || '')
                         .trim()
@@ -202,7 +202,7 @@ export default {
                 if (actualStatus !== 'confirmed' && actualStatus !== 'waitlisted') {
                     throw new Error(`Unexpected registration status: ${actualStatus}`)
                 }
-
+                // Update local states
                 await this.fetchVolunteerEvents()
 
                 if (actualStatus === 'waitlisted') {
@@ -229,7 +229,6 @@ export default {
         // ----------------VOLUNTEER CANCEL REGISTRATION
         async deleteRegistration() {
             if (!this.isCurrentEventRegistered || !this.currentEventId) return
-
             this.actionLoading = 'delete'
 
             try {
@@ -320,7 +319,7 @@ export default {
                 this.event.status = 'cancelled'
                 this.successMessage = `Successfully cancelled ${this.event.name}!`
                 this.registrationSuccess = true
-
+                // Reset properties
                 this.deleteReason = ''
                 this.$refs.deleteModal?.close()
 
@@ -348,7 +347,6 @@ export default {
                 this.promotionLoading = true
                 this.promotionAction = status
                 this.error = null
-                // this.actionLoading = `promotion-${status}`
                 const response = await fetch(`http://localhost:8000/cancel-registration/respond`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
@@ -357,17 +355,14 @@ export default {
                 const data = await response.json()
                 if (!response.ok) throw new Error(data.message || 'Failed to respond')
 
-                // Update local registration state
-                // const reg = this.registeredEvents.find((r) => r.volunteer_id === volunteerId)
-                // if (reg) reg.registration_status = status
-
+                // Update local registration state by fetching again
                 await this.fetchVolunteerEvents()
 
                 // Show success message
                 this.successMessage = `Volunteer ${status === 'confirmed' ? 'accepted' : 'rejected'} successfully`
                 this.alertClass = status === 'confirmed' ? 'alert-success' : 'alert-error'
                 this.registrationSuccess = true
-                reg.registration_status = status
+                
                 setTimeout(() => {
                     this.registrationSuccess = false
                     this.successMessage = ''
