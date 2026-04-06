@@ -14,6 +14,28 @@ CORS(app)
 from flasgger import Swagger
 swagger = Swagger(app)
 
+# --- Swagger Configuration ---
+app.config['SWAGGER'] = {
+    'title': 'Event Service API',
+    'uiversion': 3,
+    'definitions': {
+        'Event': {
+            'type': 'object',
+            'properties': {
+                'event_id': {'type': 'integer'},
+                'name': {'type': 'string'},
+                'organiser_id': {'type': 'integer'},
+                'start_date': {'type': 'string', 'format': 'date-time'},
+                'end_date': {'type': 'string', 'format': 'date-time'},
+                'max_capacity': {'type': 'integer'},
+                'current_capacity': {'type': 'integer'},
+                'status': {'type': 'string', 'enum': ['open', 'closed', 'cancelled']},
+                'reason': {'type': 'string'}
+            }
+        }
+    }
+}
+
 # --- Supabase ---
 supabase = create_client(os.environ.get('SUPABASE_URL'), os.environ.get('SUPABASE_KEY'))
 
@@ -58,10 +80,17 @@ def get_all():
     responses:
       200:
         description: List of all events
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              type: array
+              items:
+                $ref: '#/definitions/Event'
       404:
         description: No events found
-      500:
-        description: Internal server error
     """
     try:
         response = supabase.table('event').select('*').execute()
@@ -91,14 +120,16 @@ def get_by_id(event_id):
         name: event_id
         type: integer
         required: true
-        description: ID of the event
     responses:
       200:
         description: Event found
+        schema:
+          type: object
+          properties:
+            code: {type: integer}
+            data: {$ref: '#/definitions/Event'}
       404:
         description: Event not found
-      500:
-        description: Internal server error
     """
 
     try:
@@ -122,14 +153,19 @@ def get_by_organiser(organiser_id):
         name: organiser_id
         type: integer
         required: true
-        description: ID of the organiser
     responses:
       200:
         description: Events found
+        schema:
+          type: object
+          properties:
+            code: {type: integer}
+            data:
+              type: array
+              items:
+                $ref: '#/definitions/Event'
       404:
         description: No events found for this organiser
-      500:
-        description: Internal server error
     """
 
     try:
@@ -167,14 +203,12 @@ def update_capacity(event_id):
         name: event_id
         type: integer
         required: true
-        description: ID of the event
       - in: body
         name: body
         required: true
         schema:
           type: object
-          required:
-            - action
+          required: [action]
           properties:
             action:
               type: string
@@ -183,12 +217,14 @@ def update_capacity(event_id):
     responses:
       200:
         description: Capacity updated
+        schema:
+          type: object
+          properties:
+            code: {type: integer}
+            event_id: {type: integer}
+            capacity: {type: integer}
       400:
         description: Event is full
-      404:
-        description: Event not found
-      500:
-        description: Internal server error
     """
 
     try:
@@ -245,7 +281,6 @@ def delete_event(event_id):
         name: event_id
         type: integer
         required: true
-        description: ID of the event
       - in: body
         name: body
         schema:
@@ -257,11 +292,14 @@ def delete_event(event_id):
     responses:
       200:
         description: Event cancelled
-      404:
-        description: Event not found
-      500:
-        description: Internal server error
+        schema:
+          type: object
+          properties:
+            code: {type: integer}
+            status: {type: string}
+            reason: {type: string}
     """
+
     print("======== DELETE ROUTE ENTERED ========", flush=True)
     try:
         data = request.get_json(silent=True) or {}
@@ -305,5 +343,3 @@ def delete_event(event_id):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=True)
-
-

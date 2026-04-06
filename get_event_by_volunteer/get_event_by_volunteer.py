@@ -10,6 +10,30 @@ load_dotenv()
 from flasgger import Swagger
 swagger = Swagger(app)
 
+# --- Swagger Configuration ---
+app.config['SWAGGER'] = {
+    'title': 'Volunteer Event Aggregator API',
+    'description': 'Composite service that combines Registration and Event data to show a volunteer\'s schedule.',
+    'uiversion': 3,
+    'definitions': {
+        'EnrichedEvent': {
+            'type': 'object',
+            'properties': {
+                'event_id': {'type': 'integer'},
+                'name': {'type': 'string'},
+                'start_date': {'type': 'string'},
+                'end_date': {'type': 'string'},
+                'location': {'type': 'string'},
+                'registration_id': {'type': 'integer'},
+                'registration_status': {
+                    'type': 'string',
+                    'enum': ['confirmed', 'pending', 'waitlisted']
+                }
+            }
+        }
+    }
+}
+
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -23,10 +47,10 @@ EVENT_URL        = os.getenv("EVENT_URL",         "http://event:5001")
 
 @app.route("/get_event_by_volunteer/<int:volunteer_id>", methods=["GET"])
 def get_event_by_volunteer(volunteer_id):
-    """Get all events a volunteer is registered for
+    """Get all events a volunteer is registered for 
     ---
     tags:
-      - Event by Volunteer
+      - Volunteer Schedule
     parameters:
       - in: path
         name: volunteer_id
@@ -35,7 +59,7 @@ def get_event_by_volunteer(volunteer_id):
         description: ID of the volunteer
     responses:
       200:
-        description: List of events the volunteer is registered for
+        description: Successfully retrieved enriched event list
         schema:
           type: object
           properties:
@@ -47,9 +71,9 @@ def get_event_by_volunteer(volunteer_id):
                 events:
                   type: array
                   items:
-                    type: object
+                    $ref: '#/definitions/EnrichedEvent'
       404:
-        description: Volunteer not found
+        description: No active registrations found
     """
     
     registrations_resp = requests.get(f"{REGISTRATION_URL}/registration/volunteer/{volunteer_id}")

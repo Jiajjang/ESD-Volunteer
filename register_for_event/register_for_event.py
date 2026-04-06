@@ -10,6 +10,29 @@ load_dotenv()
 from flasgger import Swagger
 swagger = Swagger(app)
 
+# --- Swagger Configuration ---
+app.config['SWAGGER'] = {
+    'title': 'Event Registration Orchestrator API',
+    'description': 'Composite service coordinating Event, Volunteer, Waitlist, and Registration services.',
+    'uiversion': 3,
+    'definitions': {
+        'RegistrationResult': {
+            'type': 'object',
+            'properties': {
+                'registration_id': {'type': 'integer'},
+                'event_id': {'type': 'integer'},
+                'status': {
+                    'type': 'string', 
+                    'enum': ['confirmed', 'waitlisted'],
+                    'description': 'Confirmed if capacity was available, Waitlisted if event was full.'
+                },
+                'start_date': {'type': 'string'},
+                'end_date': {'type': 'string'}
+            }
+        }
+    }
+}
+
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -59,10 +82,17 @@ def publish_notification(routing_key: str, message: dict):
 # ── Main composite route ─────────────────────────────────────────
 @app.route("/register_for_event", methods=["POST"])
 def register_for_event():
-    """Register a volunteer for an event
+    """Register a volunteer for an event (Orchestration)
     ---
     tags:
-      - Registration
+      - Orchestrator
+    description: >
+      This composite service performs the following:
+      1. Attempts to increment event capacity.
+      2. Fetches volunteer details.
+      3. If event is full (400), adds volunteer to Waitlist.
+      4. Creates a Registration record (Confirmed/Waitlisted).
+      5. Publishes an AMQP notification for the user.
     parameters:
       - in: body
         name: body
@@ -81,7 +111,7 @@ def register_for_event():
               example: 3
     responses:
       200:
-        description: Registration successful
+        description: Registration/Waitlist process completed successfully
         schema:
           type: object
           properties:
@@ -89,26 +119,15 @@ def register_for_event():
               type: integer
               example: 200
             data:
-              type: object
-              properties:
-                registration_id:
-                  type: integer
-                event_id:
-                  type: integer
-                start_date:
-                  type: string
-                end_date:
-                  type: string
-                status:
-                  type: string
-                  enum: [confirmed, waitlisted]
+              $ref: '#/definitions/RegistrationResult'
       400:
         description: Missing required fields
       404:
         description: Volunteer not found
       500:
-        description: Internal server error
+        description: Orchestration failure (Waitlist or Registration service down)
     """
+
     data         = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id     = data.get("event_id")

@@ -12,6 +12,23 @@ CORS(app)
 from flasgger import Swagger
 swagger = Swagger(app)
 
+# --- Swagger Configuration ---
+app.config['SWAGGER'] = {
+    'title': 'Organiser Service API',
+    'uiversion': 3,
+    'definitions': {
+        'Organiser': {
+            'type': 'object',
+            'properties': {
+                'organiser_id': {'type': 'integer'},
+                'organiserName': {'type': 'string'},
+                'email': {'type': 'string'},
+                'phoneNumber': {'type': 'string'}
+            }
+        }
+    }
+}
+
 supabase = create_client(os.environ.get('SUPABASE_URL'), os.environ.get('SUPABASE_KEY'))
 
 #1 Get all organisers
@@ -24,6 +41,15 @@ def getAllOrganisers():
     responses:
       200:
         description: List of all organisers
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              type: array
+              items:
+                $ref: '#/definitions/Organiser'
       404:
         description: No organisers found
       500:
@@ -54,6 +80,13 @@ def getOrganiserByID(organiserID):
     responses:
       200:
         description: Organiser found
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              $ref: '#/definitions/Organiser'
       404:
         description: Organiser not found
       500:
@@ -84,6 +117,13 @@ def getOrganiserByEmail(email):
     responses:
       200:
         description: Organiser found
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              $ref: '#/definitions/Organiser'
       404:
         description: Organiser not found
       500:
@@ -127,6 +167,13 @@ def createOrganiser():
     responses:
       201:
         description: Organiser created
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              $ref: '#/definitions/Organiser'
       500:
         description: Internal server error
     """
@@ -157,17 +204,17 @@ def updateOrganiserDetails(organiserID):
         name: body
         required: true
         schema:
-          type: object
-          properties:
-            organiserName:
-              type: string
-            email:
-              type: string
-            phoneNumber:
-              type: string
+          $ref: '#/definitions/Organiser'
     responses:
       200:
         description: Organiser updated
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              $ref: '#/definitions/Organiser'
       404:
         description: Organiser not found
       500:

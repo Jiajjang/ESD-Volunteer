@@ -293,6 +293,25 @@ def start_amqp_consumer():
 
 @app.route('/waitlist/<int:event_id>/<int:volunteer_id>', methods=['DELETE'])
 def remove_from_waitlist(event_id, volunteer_id):
+    """Manually remove a specific volunteer from a waitlist
+        ---
+        tags:
+          - Waitlist
+        parameters:
+          - in: path
+            name: event_id
+            type: integer
+            required: true
+          - in: path
+            name: volunteer_id
+            type: integer
+            required: true
+        responses:
+          200:
+            description: Removed from waitlist successfully
+          404:
+            description: Volunteer not found in waitlist
+        """
     existing = supabase.table('waitlist') \
         .select('*') \
         .eq('event_id', event_id) \

@@ -24,6 +24,26 @@ CORS(app)
 from flasgger import Swagger
 swagger = Swagger(app)
 
+# --- Swagger Configuration ---
+app.config['SWAGGER'] = {
+    'title': 'Registration Service API',
+    'uiversion': 3,
+    'definitions': {
+        'Registration': {
+            'type': 'object',
+            'properties': {
+                'registration_id': {'type': 'integer'},
+                'volunteer_id': {'type': 'integer'},
+                'email': {'type': 'string'},
+                'event_id': {'type': 'integer'},
+                'status': {'type': 'string', 'enum': ['confirmed', 'waitlisted', 'pending', 'cancelled']},
+                'registered_at': {'type': 'string', 'example': '2026-04-05 12:00:00'},
+                'expires_at': {'type': 'string', 'nullable': True}
+            }
+        }
+    }
+}
+
 # Helper to convert Supabase row to JSON
 def format_registration(reg):
     return {
@@ -54,6 +74,18 @@ def get_all():
     responses:
       200:
         description: List of all registrations
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              type: object
+              properties:
+                Registrations:
+                  type: array
+                  items:
+                    $ref: '#/definitions/Registration'
       404:
         description: No registrations found
     """
@@ -74,10 +106,21 @@ def get_by_event(event_id):
         name: event_id
         type: integer
         required: true
-        description: ID of the event
     responses:
       200:
         description: Registrations found
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              type: object
+              properties:
+                Registrations:
+                  type: array
+                  items:
+                    $ref: '#/definitions/Registration'
       400:
         description: Event not found
     """
@@ -102,6 +145,21 @@ def get_emails_by_event(event_id):
     responses:
       200:
         description: List of emails
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              type: object
+              properties:
+                event_id:
+                  type: integer
+                emails:
+                  type: array
+                  items:
+                    type: string
+                    example: "volunteer@example.com"
       404:
         description: No emails found
     """
@@ -144,8 +202,20 @@ def get_by_event_and_volunteer(event_id, volunteer_id):
     responses:
       200:
         description: Registration found
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              type: object
+              properties:
+                Registrations:
+                  type: array
+                  items:
+                    $ref: '#/definitions/Registration'
       400:
-        description: Not found
+        description: Registration not found
     """
 
     registrations = getData({"event_id": event_id, "volunteer_id" : volunteer_id})
@@ -167,8 +237,20 @@ def get_by_volunteer(volunteer_id):
     responses:
       200:
         description: Registrations found
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              type: object
+              properties:
+                Registrations:
+                  type: array
+                  items:
+                    $ref: '#/definitions/Registration'
       400:
-        description: Not found
+        description: No registrations found for this volunteer
     """
 
     registrations = getData({ "volunteer_id" : volunteer_id})
@@ -194,40 +276,31 @@ def add_registration():
             - email
             - event_id
           properties:
-            volunteer_id:
-              type: integer
-              example: 1
-            email:
-              type: string
-              example: john@example.com
-            event_id:
-              type: integer
-              example: 3
-            status:
-              type: string
-              enum: [confirmed, waitlisted, pending]
-              example: confirmed
-            expires_at:
-              type: string
-              example: "2026-04-05 12:00:00"
+            volunteer_id: {type: integer, example: 1}
+            email: {type: string, example: "john@example.com"}
+            event_id: {type: integer, example: 3}
+            status: {type: string, enum: [confirmed, waitlisted, pending], example: confirmed}
+            expires_at: {type: string, example: "2026-04-05 12:00:00"}
     responses:
       201:
         description: Registration created
+        schema:
+          type: object
+          properties:
+            code: {type: integer}
+            data: {$ref: '#/definitions/Registration'}
       400:
         description: User already registered
     """
 
     data = request.get_json()
-    # existing = getData({"volunteer_id": data["volunteer_id"], "event_id": data["event_id"]})
-    # if existing and existing[0]["status"] in ["confirmed", "waitlisted"]:
-    #     return jsonify({"code": 400, "message": "User already registered"}), 400
     
     existing = getData({
         "volunteer_id": data["volunteer_id"],
         "event_id": data["event_id"]
     })
 
-    # 🔥 block ANY active registration (not just first record)
+    # block ANY active registration (not just first record)
     if existing:
         active = [
             r for r in existing
@@ -254,7 +327,7 @@ def add_registration():
 # ─── DELETE ───
 @app.route("/registration", methods=["DELETE"])
 def cancel_registration():
-    """Cancel a registration (sets status to cancelled, keeps record)
+    """Cancel a registration (sets status to cancelled)
     ---
     tags:
       - Registration
@@ -270,16 +343,24 @@ def cancel_registration():
           properties:
             volunteer_id:
               type: integer
-              example: 1
             event_id:
               type: integer
-              example: 3
     responses:
       200:
-        description: Registration cancelled
+        description: Registration cancelled successfully
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
+            data:
+              $ref: '#/definitions/Registration'
       400:
-        description: User not found
+        description: Registration not found
     """
+
     data = request.get_json()
     updated = supabase.table("registration")\
         .update({"status": "cancelled", "expires_at": None})\
@@ -293,11 +374,11 @@ def cancel_registration():
             "data": format_registration(updated.data[0])
         })
     return jsonify({"code": 400, "message": "User not found"}), 400
-    
-# ─── PUT (update to confirmed) ───
-@app.route("/registration", methods=["PUT"])
-def update_registration():
-    """Update registration status to confirmed
+
+# ─── PUT /registration/status (used by composite) ───
+@app.route("/registration/status", methods=["PUT"])
+def update_registration_status():
+    """Update status of the latest registration and cancel others
     ---
     tags:
       - Registration
@@ -310,33 +391,33 @@ def update_registration():
           required:
             - volunteer_id
             - event_id
+            - status
           properties:
             volunteer_id:
               type: integer
-              example: 1
             event_id:
               type: integer
-              example: 3
+            status:
+              type: string
+              enum: [confirmed, pending, waitlisted, cancelled]
+            expires_at:
+              type: string
+              description: Only required if status is pending
     responses:
       200:
-        description: Status updated to confirmed
+        description: Latest registration updated successfully
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
+            data:
+              $ref: '#/definitions/Registration'
       400:
-        description: User not found
+        description: Missing fields or user not found
     """
-
-    data = request.get_json()
-    updated = supabase.table("registration")\
-        .update({"status": "confirmed"})\
-        .eq("volunteer_id", data["volunteer_id"])\
-        .eq("event_id", data["event_id"])\
-        .execute()
-    if updated.data:
-        return jsonify({"code": 200, "message": "User status updated successfully", "data": format_registration(updated.data[0])})
-    return jsonify({"code": 400, "message": "User not found"}), 400
-
-# ─── PUT /registration/status (used by composite) ───
-@app.route("/registration/status", methods=["PUT"])
-def update_registration_status():
 
     data = request.get_json()
     volunteer_id = data.get("volunteer_id")

@@ -11,6 +11,27 @@ CORS(app)
 from flasgger import Swagger
 swagger = Swagger(app)
 
+# --- Swagger Configuration ---
+app.config['SWAGGER'] = {
+    'title': 'Volunteer Service API',
+    'uiversion': 3,
+    'definitions': {
+        'Volunteer': {
+            'type': 'object',
+            'properties': {
+                'volunteer_id': {'type': 'integer'},
+                'volunteerName': {'type': 'string'},
+                'email': {'type': 'string'},
+                'phoneNumber': {'type': 'string'},
+                'gender': {'type': 'string'},
+                'password': {'type': 'string'},
+                'created': {'type': 'string', 'format': 'date-time'},
+                'modified': {'type': 'string', 'format': 'date-time'}
+            }
+        }
+    }
+}
+
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -29,6 +50,18 @@ def get_all():
     responses:
       200:
         description: List of all volunteers
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              type: object
+              properties:
+                volunteers:
+                  type: array
+                  items:
+                    $ref: '#/definitions/Volunteer'
       404:
         description: No volunteers found
     """
@@ -61,6 +94,13 @@ def get_by_id(volunteer_id):
     responses:
       200:
         description: Volunteer found
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              $ref: '#/definitions/Volunteer'
       404:
         description: Volunteer not found
     """
@@ -93,6 +133,13 @@ def get_by_email(email):
     responses:
       200:
         description: Volunteer found
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              $ref: '#/definitions/Volunteer'
       404:
         description: Volunteer not found
     """
@@ -145,6 +192,13 @@ def create_volunteer():
     responses:
       201:
         description: Volunteer created
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              $ref: '#/definitions/Volunteer'
       400:
         description: Email already exists
       500:
@@ -173,7 +227,6 @@ def create_volunteer():
         return jsonify({"code": 201, "data": response.data[0]}), 201
     except Exception as e:
         return jsonify({"code": 500, "message": "Error creating volunteer: " + str(e)}), 500
-
 
 # 5. Update volunteer
 @app.route("/volunteer/<int:volunteer_id>", methods=['PUT'])
@@ -205,6 +258,13 @@ def update_volunteer(volunteer_id):
     responses:
       200:
         description: Volunteer updated
+        schema:
+          type: object
+          properties:
+            code:
+              type: integer
+            data:
+              $ref: '#/definitions/Volunteer'
       404:
         description: Volunteer not found
       500:

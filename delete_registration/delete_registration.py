@@ -17,6 +17,30 @@ app = Flask(__name__)
 CORS(app)
 swagger = Swagger(app)
 
+# --- Swagger Configuration ---
+app.config['SWAGGER'] = {
+    'title': 'Cancellation & Promotion Orchestrator API',
+    'description': 'Handles event cancellations, waitlist promotions, and automated timeout scheduling.',
+    'uiversion': 3,
+    'definitions': {
+        'PromotionResponse': {
+            'type': 'object',
+            'properties': {
+                'code': {'type': 'integer'},
+                'message': {'type': 'string'},
+                'data': {
+                    'type': 'object',
+                    'properties': {
+                        'cancelledVolunteer': {'type': 'object'},
+                        'promotedVolunteerID': {'type': 'integer', 'nullable': True},
+                        'expires_at': {'type': 'string', 'description': 'ISO timestamp for promotion expiry'}
+                    }
+                }
+            }
+        }
+    }
+}
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -127,6 +151,32 @@ atexit.register(lambda: scheduler.shutdown())
 # ── POST /cancel-registration ─────────────────────────────────────────────────
 @app.route("/cancel-registration", methods=["POST"])
 def cancel_registration():
+    """Cancel a registration and promote the next person
+    ---
+    tags:
+      - Cancellation & Promotion
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [volunteer_id, event_id, registration_id]
+          properties:
+            volunteer_id:
+              type: integer
+              example: 1
+            event_id:
+              type: integer
+              example: 101
+            registration_id:
+              type: integer
+              example: 500
+    responses:
+      200:
+        description: Cancellation successful.
+    """
+
     data            = request.get_json()
     volunteer_id    = data.get("volunteer_id")
     event_id        = data.get("event_id")
@@ -210,6 +260,33 @@ def cancel_registration():
 # ── PUT /cancel-registration/respond ─────────────────────────────────────────
 @app.route("/cancel-registration/respond", methods=["PUT"])
 def respond_to_promotion():
+    """Volunteer responds to a 'Pending' promotion
+    ---
+    tags:
+      - Cancellation & Promotion
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [volunteer_id, event_id, status]
+          properties:
+            volunteer_id:
+              type: integer
+              example: 1
+            event_id:
+              type: integer
+              example: 101
+            status:
+              type: string
+              enum: [confirmed, rejected]
+              example: "confirmed"
+    responses:
+      200:
+        description: Response recorded.
+    """
+
     data         = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id     = data.get("event_id")
@@ -303,10 +380,32 @@ def respond_to_promotion():
         },
     }), 200
 
-
 # ── PUT /cancel-registration/timeout ─────────────────────────────────────────
 @app.route("/cancel-registration/timeout", methods=["PUT"])
 def handle_timeout():
+    """Trigger a promotion timeout
+    ---
+    tags:
+      - System & Automation
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [volunteer_id, event_id]
+          properties:
+            volunteer_id:
+              type: integer
+              example: 1
+            event_id:
+              type: integer
+              example: 101
+    responses:
+      200:
+        description: Timeout processed.
+    """
+
     data         = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id     = data.get("event_id")
@@ -369,11 +468,58 @@ def handle_timeout():
 # ── GET /health ───────────────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
+    """Service health check endpoint.
+    ---
+    tags:
+        - System & Automation
+    responses:
+        200:
+            description: Service is healthy and running.
+            schema:
+                type: object
+                properties:
+                    code:
+                        type: integer
+                        example: 200
+                    status:
+                        type: string
+                        example: healthy
+                    service:
+                        type: string
+                        example: cancel-registration-service
+    """
+
     return jsonify({"code": 200, "status": "healthy", "service": "cancel-registration-service"}), 200
 
 
 @app.route("/cancel-waitlist", methods=["POST"])
 def cancel_waitlist():
+    """Remove volunteer from waitlist
+    ---
+    tags:
+      - Cancellation & Promotion
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [volunteer_id, event_id, registration_id]
+          properties:
+            volunteer_id:
+              type: integer
+              example: 1
+            event_id:
+              type: integer
+              example: 101
+            registration_id:
+              type: integer
+              example: 500
+    responses:
+      200:
+        description: Removed from waitlist.
+    """
+
     data         = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id     = data.get("event_id")
@@ -414,7 +560,6 @@ def cancel_waitlist():
         "message": "Successfully removed from waitlist",
         "data": cancelled_data
     }), 200
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5011, debug=True)
