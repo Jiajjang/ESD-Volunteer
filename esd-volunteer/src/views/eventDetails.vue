@@ -25,6 +25,7 @@ export default {
             promotionAction: null,
             promotionError: null,
             promotionSuccess: '',
+            // registrationState: ''
         }
     },
 
@@ -96,7 +97,7 @@ export default {
         },
 
         isCurrentEventRegistered() {
-            return !!this.registrationState // Truthy = registered
+            return !!this.registrationState
         },
 
         buttonLabel() {
@@ -340,44 +341,41 @@ export default {
         },
         // --------------- Waitlist
         async respondToPromotion(volunteerId, eventId, status) {
-    if (!volunteerId || !eventId || !['confirmed', 'rejected'].includes(status)) {
-        this.error = 'Invalid promotion parameters'
-        return
-    }
-
-    try {
-        this.actionLoading = `promotion-${status}`
-        const response = await fetch(
-            `http://localhost:8000/cancel-registration/respond`,
-            {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ volunteer_id: volunteerId, event_id: eventId, status }),
+            if (!volunteerId || !eventId || !['confirmed', 'rejected'].includes(status)) {
+                this.error = 'Invalid promotion parameters'
+                return
             }
-        )
-        const data = await response.json()
-        if (!response.ok) throw new Error(data.message || 'Failed to respond')
 
-        // Update local registration state
-        const reg = this.registeredEvents.find(r => r.volunteer_id === volunteerId)
-        if (reg) reg.registration_status = status
+            try {
+                this.actionLoading = `promotion-${status}`
+                const response = await fetch(`http://localhost:8000/cancel-registration/respond`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ volunteer_id: volunteerId, event_id: eventId, status }),
+                })
+                const data = await response.json()
+                if (!response.ok) throw new Error(data.message || 'Failed to respond')
 
-        // Show success message
-        this.successMessage = `Volunteer ${status === 'confirmed' ? 'accepted' : 'rejected'} successfully`
-        this.alertClass = status === 'confirmed' ? 'alert-success' : 'alert-error'
-        this.registrationSuccess = true
-        setTimeout(() => {
-            this.registrationSuccess = false
-            this.successMessage = ''
-        }, 3000)
+                // Update local registration state
+                const reg = this.registeredEvents.find((r) => r.volunteer_id === volunteerId)
+                if (reg) reg.registration_status = status
 
-    } catch (err) {
-        console.error('Respond to promotion error:', err)
-        this.error = err.message || 'Network error'
-    } finally {
-        this.actionLoading = null
-    }
-}
+                // Show success message
+                this.successMessage = `Volunteer ${status === 'confirmed' ? 'accepted' : 'rejected'} successfully`
+                this.alertClass = status === 'confirmed' ? 'alert-success' : 'alert-error'
+                this.registrationSuccess = true
+                reg.registration_status = status
+                setTimeout(() => {
+                    this.registrationSuccess = false
+                    this.successMessage = ''
+                }, 3000)
+            } catch (err) {
+                console.error('Respond to promotion error:', err)
+                this.error = err.message || 'Network error'
+            } finally {
+                this.actionLoading = null
+            }
+        },
     },
 
     async mounted() {
@@ -420,7 +418,9 @@ export default {
                         :class="{
                             'badge-success': registrationState === 'confirmed',
                             'badge-warning': registrationState === 'pending',
-                            'badge-error': registrationState === 'waitlisted',
+                            'badge-error':
+                                registrationState === 'waitlisted' ||
+                                registrationState === 'rejected',
                             'badge-neutral': !registrationState,
                         }"
                     >
@@ -499,6 +499,39 @@ export default {
                                 @click="deleteRegistration"
                             >
                                 {{ actionLoading === 'delete' ? 'Unregistering...' : 'Unregister' }}
+                            </button>
+                        </div>
+                        <div
+                            class="flex flex-col w-full gap-2"
+                            v-else-if="
+                                isCurrentEventRegistered && registrationState === 'waitlisted'
+                            "
+                        >
+                            <button
+                                class="w-full rounded-lg btn disabled"
+                                :class="buttonClass"
+                                :disabled="
+                                    loadingRegistration ||
+                                    actionLoading === 'register' ||
+                                    isCurrentEventRegistered
+                                "
+                                @click="addRegistration"
+                            >
+                                {{ buttonLabel }}
+                            </button>
+                        </div>
+                        <div class="flex flex-col w-full gap-2" v-else>
+                            <button
+                                class="w-full rounded-lg btn"
+                                :class="buttonClass"
+                                :disabled="
+                                    loadingRegistration ||
+                                    actionLoading === 'register' ||
+                                    isCurrentEventRegistered
+                                "
+                                @click="addRegistration"
+                            >
+                                {{ buttonLabel }}
                             </button>
                         </div>
                     </template>

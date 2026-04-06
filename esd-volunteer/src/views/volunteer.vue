@@ -54,7 +54,6 @@ export default {
                 this.loading = false
             }
         },
-
         async fetchVolunteerEvents() {
             try {
                 const response = await fetch(
@@ -64,7 +63,9 @@ export default {
 
                 const data = await response.json()
                 console.log('Raw API data:', data.data.events)
-                this.events = data.data.events
+                this.events = data.data.events.filter((event) => event.registration_status !== 'rejected')
+                console.log('Filtered Data:', data.data.events)
+
             } catch (err) {
                 console.error('API Error:', err)
                 this.error = err.message
