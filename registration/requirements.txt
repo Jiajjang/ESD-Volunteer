@@ -1,8 +1,7 @@
 flask
 flask-cors
-supabase
-websockets
-pika
 python-dotenv
 pytz
+supabase
+pika
 flasgger

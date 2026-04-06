@@ -9,11 +9,27 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
+from flasgger import Swagger
+swagger = Swagger(app)
+
 supabase = create_client(os.environ.get('SUPABASE_URL'), os.environ.get('SUPABASE_KEY'))
 
 #1 Get all organisers
 @app.route("/organiser", methods=['GET'])
 def getAllOrganisers():
+    """Get all organisers
+    ---
+    tags:
+      - Organiser
+    responses:
+      200:
+        description: List of all organisers
+      404:
+        description: No organisers found
+      500:
+        description: Internal server error
+    """
+
     try:
         response = supabase.table('organiser').select('*').execute()
         if response.data:
@@ -25,6 +41,25 @@ def getAllOrganisers():
 #2 Get organiser by ID
 @app.route("/organiser/<int:organiserID>", methods=['GET'])
 def getOrganiserByID(organiserID):
+    """Get an organiser by ID
+    ---
+    tags:
+      - Organiser
+    parameters:
+      - in: path
+        name: organiserID
+        type: integer
+        required: true
+        description: ID of the organiser
+    responses:
+      200:
+        description: Organiser found
+      404:
+        description: Organiser not found
+      500:
+        description: Internal server error
+    """
+
     try:
         response = supabase.table('organiser').select('*').eq('organiser_id', organiserID).execute()
         if response.data:
@@ -36,6 +71,25 @@ def getOrganiserByID(organiserID):
 #3 Get organiser by email
 @app.route("/organiser/<string:email>", methods=['GET'])
 def getOrganiserByEmail(email):
+    """Get an organiser by email
+    ---
+    tags:
+      - Organiser
+    parameters:
+      - in: path
+        name: email
+        type: string
+        required: true
+        description: Email of the organiser
+    responses:
+      200:
+        description: Organiser found
+      404:
+        description: Organiser not found
+      500:
+        description: Internal server error
+    """
+
     try:
         response = supabase.table('organiser').select('*').eq('email', email).execute()
         if response.data:
@@ -47,6 +101,36 @@ def getOrganiserByEmail(email):
 #4 Create organiser
 @app.route("/organiser", methods=['POST'])
 def createOrganiser():
+    """Create a new organiser
+    ---
+    tags:
+      - Organiser
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - organiserName
+            - email
+          properties:
+            organiserName:
+              type: string
+              example: Jane Smith
+            email:
+              type: string
+              example: jane@example.com
+            phoneNumber:
+              type: string
+              example: "98765432"
+    responses:
+      201:
+        description: Organiser created
+      500:
+        description: Internal server error
+    """
+
     try:
         data = request.get_json()
         response = supabase.table('organiser').insert(data).execute()
@@ -59,6 +143,37 @@ def createOrganiser():
 #5 Update organiser by ID
 @app.route("/organiser/<int:organiserID>", methods=['PUT'])
 def updateOrganiserDetails(organiserID):
+    """Update an organiser by ID
+    ---
+    tags:
+      - Organiser
+    parameters:
+      - in: path
+        name: organiserID
+        type: integer
+        required: true
+        description: ID of the organiser
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            organiserName:
+              type: string
+            email:
+              type: string
+            phoneNumber:
+              type: string
+    responses:
+      200:
+        description: Organiser updated
+      404:
+        description: Organiser not found
+      500:
+        description: Internal server error
+    """
+    
     try:
         data = request.get_json()
         response = supabase.table('organiser').update(data).eq('organiser_id', organiserID).execute()

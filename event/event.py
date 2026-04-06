@@ -11,21 +11,25 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
+from flasgger import Swagger
+swagger = Swagger(app)
+
 # --- Supabase ---
 supabase = create_client(os.environ.get('SUPABASE_URL'), os.environ.get('SUPABASE_KEY'))
 
 # --- RabbitMQ Config ---
-RABBITMQ_HOST = os.environ.get('RABBITMQ_HOST', 'localhost')
-RABBITMQ_PORT = int(os.environ.get('RABBITMQ_PORT', 5672))
-RABBITMQ_USER = os.environ.get('RABBITMQ_USER', 'guest')
-RABBITMQ_PASS = os.environ.get('RABBITMQ_PASS', 'guest')
-FANOUT_EXCHANGE = os.environ.get('FANOUT_EXCHANGE', 'G2T7_fanout.exchange')
+RABBITMQ_HOST  = os.getenv("RABBITMQ_HOST", "active-white-bear-01.rmq6.cloudamqp.com")
+RABBITMQ_PORT  = int(os.getenv("RABBITMQ_PORT", 5672))
+RABBITMQ_VHOST = os.getenv("RABBITMQ_VHOST", "ntxsydfp")
+RABBITMQ_USER  = os.getenv("RABBITMQ_USER", "ntxsydfp")
+RABBITMQ_PASS  = os.getenv("RABBITMQ_PASS", "VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9")
+FANOUT_EXCHANGE = os.getenv("FANOUT_EXCHANGE","G2T7_fanout.exchange")
 
 #Helper function for RabbitMQ --------------------
-def publish_event_cancelled(event_id):
+def publish_event_cancelled(event_id, event_name, start_date, end_date):
     try:
         credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
-        parameters = pika.ConnectionParameters(host=RABBITMQ_HOST, port=RABBITMQ_PORT, credentials=credentials)
+        parameters = pika.ConnectionParameters(host=RABBITMQ_HOST, port=RABBITMQ_PORT, virtual_host=RABBITMQ_VHOST, credentials=credentials)
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
 
@@ -33,7 +37,7 @@ def publish_event_cancelled(event_id):
         channel.exchange_declare(exchange=FANOUT_EXCHANGE, exchange_type='fanout', durable=True)
 
         #create the message
-        message = json.dumps({"event_id": event_id, "status": "cancelled"})
+        message = json.dumps({"event_id": event_id, "event_name" : event_name, "start_date": start_date, "end_date": end_date})
 
         #publish
         channel.basic_publish(exchange=FANOUT_EXCHANGE, routing_key='', body=message)
@@ -47,6 +51,18 @@ def publish_event_cancelled(event_id):
 #Get All Events
 @app.route("/event", methods=['GET'])
 def get_all():
+    """Get all events
+    ---
+    tags:
+      - Event
+    responses:
+      200:
+        description: List of all events
+      404:
+        description: No events found
+      500:
+        description: Internal server error
+    """
     try:
         response = supabase.table('event').select('*').execute()
         if response.data:
@@ -63,9 +79,118 @@ def get_all():
             "message": str(e)
         }), 500
 
+#Get Event by ID
+@app.route("/event/<int:event_id>", methods=['GET'])
+def get_by_id(event_id):
+    """Get an event by ID
+    ---
+    tags:
+      - Event
+    parameters:
+      - in: path
+        name: event_id
+        type: integer
+        required: true
+        description: ID of the event
+    responses:
+      200:
+        description: Event found
+      404:
+        description: Event not found
+      500:
+        description: Internal server error
+    """
+
+    try:
+        response = supabase.table('event').select('*').eq('event_id', event_id).execute()
+        if response.data:
+            return jsonify({"code": 200, "data": response.data[0]})
+        return jsonify({"code": 404, "message": "Event not found"}), 404
+    except Exception as e:
+        return jsonify({"code": 500, "message": str(e)}), 500
+
+
+# Get Event by OrganiserId
+@app.route("/event/organiser/<int:organiser_id>", methods=['GET'])
+def get_by_organiser(organiser_id):
+    """Get events by organiser ID
+    ---
+    tags:
+      - Event
+    parameters:
+      - in: path
+        name: organiser_id
+        type: integer
+        required: true
+        description: ID of the organiser
+    responses:
+      200:
+        description: Events found
+      404:
+        description: No events found for this organiser
+      500:
+        description: Internal server error
+    """
+
+    try:
+        response = (
+            supabase.table('event').select('*').eq('organiser_id', organiser_id).execute()
+        )
+
+        if response.data:
+            return jsonify({
+                "code": 200,
+                "data": response.data
+            }), 200
+
+        return jsonify({
+            "code": 404,
+            "message": "No events found for this organiser",
+            "data": []
+        }), 404
+
+    except Exception as e:
+        return jsonify({
+            "code": 500,
+            "message": str(e)
+        }), 500
+
 #Scenario 1 and 2 Update Capacity
 @app.route("/event/<int:event_id>/capacity", methods=['PUT'])
 def update_capacity(event_id):
+    """Increment or decrement event capacity
+    ---
+    tags:
+      - Event
+    parameters:
+      - in: path
+        name: event_id
+        type: integer
+        required: true
+        description: ID of the event
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - action
+          properties:
+            action:
+              type: string
+              enum: [increment, decrement]
+              example: increment
+    responses:
+      200:
+        description: Capacity updated
+      400:
+        description: Event is full
+      404:
+        description: Event not found
+      500:
+        description: Internal server error
+    """
+
     try:
         data = request.get_json()
         action = data.get('action')
@@ -99,7 +224,7 @@ def update_capacity(event_id):
         update_res = supabase.table('event').update({"current_capacity": curr}).eq('event_id', event_id).execute()
         return jsonify({
             "code": 200, 
-            "eventID": event_id, 
+            "event_id": event_id, 
             "capacity": curr})
     except Exception as e:
         return jsonify({
@@ -109,30 +234,69 @@ def update_capacity(event_id):
     
 
 #Scenario 3 Cancel Event (RabbitMQ Fanout)
-@app.route("/event/<int:event_id>", methods=['DELETE'])
+@app.route("/event/delete/<int:event_id>", methods=['DELETE'])
 def delete_event(event_id):
+    """Cancel an event and notify all services via RabbitMQ
+    ---
+    tags:
+      - Event
+    parameters:
+      - in: path
+        name: event_id
+        type: integer
+        required: true
+        description: ID of the event
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            reason:
+              type: string
+              example: Bad weather conditions
+    responses:
+      200:
+        description: Event cancelled
+      404:
+        description: Event not found
+      500:
+        description: Internal server error
+    """
+    print("======== DELETE ROUTE ENTERED ========", flush=True)
     try:
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         reason = data.get('reason', 'No reason provided')
 
         # Update Supabase Status
-        response = supabase.table('event').update({
-            "status": "cancelled",
-            "reason": reason
-        }).eq('event_id', event_id).execute()
+        event_result = supabase.table('event').select(
+            "event_id, name, start_date, end_date"
+        ).eq('event_id', event_id).execute()
 
-        if not response.data:
+        if not event_result.data:
             return jsonify({
-                "code": 404, 
+                "code": 404,
                 "message": "Event not found"
             }), 404
 
+        event_row = event_result.data[0]
+        event_name = event_row.get("name")
+        start_date = event_row.get("start_date")
+        end_date = event_row.get("end_date")
+
+        supabase.table('event').update({
+            "status": "cancelled",
+            "reason": reason
+        }).eq('event_id', event_id).execute()
+        
         # Publish to RabbitMQ (The Fanout Exchange)
-        publish_event_cancelled(event_id)
+        publish_event_cancelled(event_id, event_name, start_date, end_date)
 
         return jsonify({
             "code": 200,
-            "eventID": event_id,
+            "event_id": event_id,
+            "event_name": event_name,
+            "start_date": start_date,
+            "end_date": end_date,
             "status": "cancelled",
             "reason": reason
         })

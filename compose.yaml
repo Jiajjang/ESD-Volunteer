@@ -1,0 +1,200 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+  waitlist:
+    build: ./waitlist
+    ports:
+      - "5003:5003"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - RABBITMQ_HOST=active-white-bear-01.rmq6.cloudamqp.com
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_VHOST=ntxsydfp
+      - RABBITMQ_USER=ntxsydfp
+      - RABBITMQ_PASS=VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  registration:
+    build: ./registration
+    ports:
+      - "5000:5000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    restart: always
+
+  consumer_reg:
+    build: ./registration
+    command: python ./consumer_reg.py
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASS=${RABBITMQ_PASS}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_VHOST=${RABBITMQ_VHOST}
+    depends_on:
+      - rabbitmq
+    restart: always
+
+  event:
+    build: ./event
+    ports:
+      - "5001:5001"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASS=${RABBITMQ_PASS}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_VHOST=${RABBITMQ_VHOST}
+    restart: always
+
+  volunteer:
+    build: ./volunteer
+    ports:
+      - "5002:5002"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    restart: always
+
+  organiser:
+    build: ./organiser
+    ports:
+      - "5004:5004"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    restart: always
+
+  register_for_event:
+    build: ./register_for_event
+    ports:
+      - "5010:5010"
+    environment:
+      - REGISTRATION_URL=http://registration:5000
+      - EVENT_URL=http://event:5001
+      - VOLUNTEER_URL=http://volunteer:5002
+      - WAITLIST_URL=http://waitlist:5003
+      - RABBITMQ_HOST=active-white-bear-01.rmq6.cloudamqp.com
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_VHOST=ntxsydfp
+      - RABBITMQ_USER=ntxsydfp
+      - RABBITMQ_PASS=VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9
+    depends_on:
+      - event
+      - volunteer
+      - registration
+      - waitlist
+      - rabbitmq
+    restart: always
+
+  delete_registration:
+    build: ./delete_registration
+    ports:
+      - "5011:5011"
+    environment:
+      - REGISTRATION_URL=http://registration:5000
+      - EVENT_URL=http://event:5001
+      - VOLUNTEER_URL=http://volunteer:5002
+      - WAITLIST_URL=http://waitlist:5003
+      - RABBITMQ_HOST=active-white-bear-01.rmq6.cloudamqp.com
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_VHOST=ntxsydfp
+      - RABBITMQ_USER=ntxsydfp
+      - RABBITMQ_PASS=VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9
+    depends_on:
+      - event
+      - volunteer
+      - registration
+      - waitlist
+      - rabbitmq
+    restart: always
+
+  get_event_by_volunteer:
+    build: ./get_event_by_volunteer
+    ports:
+      - "5012:5012"
+    environment:
+      - REGISTRATION_URL=http://registration:5000
+      - EVENT_URL=http://event:5001
+      - VOLUNTEER_URL=http://volunteer:5002
+      - WAITLIST_URL=http://waitlist:5003
+      - RABBITMQ_HOST=active-white-bear-01.rmq6.cloudamqp.com
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_VHOST=ntxsydfp
+      - RABBITMQ_USER=ntxsydfp
+      - RABBITMQ_PASS=VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9
+    depends_on:
+      - event
+      - volunteer
+      - registration
+      - waitlist
+      - rabbitmq
+    restart: always
+  frontend:
+    build: ./esd-volunteer
+    ports:
+      - "8080:8080"
+    environment:
+      - REGISTRATION_URL=http://registration:5000
+      - EVENT_URL=http://event:5001
+      - VOLUNTEER_URL=http://volunteer:5002
+      - WAITLIST_URL=http://waitlist:5003
+      - RABBITMQ_HOST=active-white-bear-01.rmq6.cloudamqp.com
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_VHOST=ntxsydfp
+      - RABBITMQ_USER=ntxsydfp
+      - RABBITMQ_PASS=VRMsjW_248ItCPA3gSjNFl51HfiO1Dt9
+    depends_on:
+      - event
+      - volunteer
+      - registration
+      - waitlist
+      - rabbitmq
+    restart: always
+    
+  kong:
+    image: kong/kong-gateway:3.9
+    container_name: esd-volunteer-kong
+    restart: always
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /opt/kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8002:8002"
+    volumes:
+      - ./kong.yml:/opt/kong/kong.yml:ro
+    depends_on:
+      - event
+      - registration
+      - volunteer
+      - waitlist
+      - register_for_event
+      - delete_registration
+      - get_event_by_volunteer
+      - organiser
+
