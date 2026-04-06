@@ -58,6 +58,13 @@ def publish_message(routing_key: str, message: dict):
             exchange=TOPIC_EXCHANGE, routing_key=routing_key,
             body=json.dumps(message),
             properties=pika.BasicProperties(content_type="application/json", delivery_mode=2),
+        )
+        conn.close()
+        logger.info(f"[AMQP] Published → {routing_key}: {message}")
+
+    except Exception as e:
+        logger.error(f"[AMQP] Publish failed for {routing_key}: {e}")
+        
 EVENT_URL = os.getenv("EVENT_URL", "http://event:5001")
 WAITLIST_URL = os.getenv("WAITLIST_URL", "http://waitlist:5003")
 
@@ -98,27 +105,27 @@ def get_event_details(event_id: int) -> dict:
 
 # ── CORE LOGIC ────────────────────────────────────────────────────────
 
-def auto_timeout(volunteer_id, event_id):
-    logger.info(f"[TIMEOUT] Checking volunteer {volunteer_id}")
+# def auto_timeout(volunteer_id, event_id):
+#     logger.info(f"[TIMEOUT] Checking volunteer {volunteer_id}")
 
-    # check if still pending
-    check = requests.get(f"{REGISTRATION_URL}/registration/{event_id}/{volunteer_id}")
-    if check.status_code == 200:
-        reg = check.json().get("data", {}).get("Registrations", [])
-        if reg and reg[0].get("status") != "pending":
-            logger.info("[TIMEOUT] Already responded → skip")
-            return
+#     # check if still pending
+#     check = requests.get(f"{REGISTRATION_URL}/registration/{event_id}/{volunteer_id}")
+#     if check.status_code == 200:
+#         reg = check.json().get("data", {}).get("Registrations", [])
+#         if reg and reg[0].get("status") != "pending":
+#             logger.info("[TIMEOUT] Already responded → skip")
+#             return
 
-    # cancel
-    requests.put(
-        f"{REGISTRATION_URL}/registration/status",
-        json={"volunteer_id": volunteer_id, "event_id": event_id, "status": "cancelled"},
-    )
+#     # cancel
+#     requests.put(
+#         f"{REGISTRATION_URL}/registration/status",
+#         json={"volunteer_id": volunteer_id, "event_id": event_id, "status": "cancelled"},
+#     )
 
-    logger.info(f"[TIMEOUT] Auto-cancelled {volunteer_id}")
+#     logger.info(f"[TIMEOUT] Auto-cancelled {volunteer_id}")
 
-    # loop promotion
-    promote_next(event_id)
+#     # loop promotion
+#     promote_next(event_id)
 
 
 # ── Scheduler: auto-cancel expired pending registrations ─────────────────────
@@ -348,6 +355,8 @@ def handle_timeout():
 
     if not volunteer_id or not event_id:
         return jsonify({"code": 400, "message": "volunteer_id and event_id required"}), 400
+    
+    event_details = get_event_details(event_id)
 
 # def promote_next(event_id):
 #     logger.info(f"[PROMOTE] Looking for next in waitlist")
