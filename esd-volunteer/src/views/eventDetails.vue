@@ -231,28 +231,24 @@ export default {
             if (!this.isCurrentEventRegistered || !this.currentEventId) return
 
             this.actionLoading = 'delete'
-            this.registrationSuccess = false
-            this.successMessage = ''
+
             try {
-                const response = await fetch('http://localhost:8000/cancel-registration', {
+                // ← call different endpoint based on status
+                const endpoint = this.registrationState === 'waitlisted'
+                    ? 'http://localhost:8000/cancel-waitlist'
+                    : 'http://localhost:8000/cancel-registration'
+
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        volunteer_id: this.volunteer_id,
-                        event_id: this.currentEventId,
+                        volunteer_id:    this.volunteer_id,
+                        event_id:        this.currentEventId,
                         registration_id: this.currentRegistration['registration_id'],
                     }),
                 })
 
                 if (!response.ok) throw new Error('Unregistration failed')
-                console.log('delete payload', {
-                    volunteer_id: this.volunteer_id,
-                    event_id: this.currentEventId,
-                    registration_id: this.currentRegistrationId,
-                    currentRegistration: this.currentRegistration,
-                    registeredEvents: this.registeredEvents,
-                })
-                await response.json()
                 await this.fetchVolunteerEvents()
 
                 this.successMessage = `Successfully unregistered from ${this.event.name}!`
@@ -263,12 +259,12 @@ export default {
                     this.successMessage = ''
                 }, 3000)
             } catch (err) {
-                console.error('API Error:', err)
                 this.error = err.message
             } finally {
                 this.actionLoading = null
             }
         },
+
         // --------- ORGANISER DELETE EVENT
         openDeleteModal() {
             this.deleteReason = ''
@@ -514,14 +510,16 @@ export default {
                             <button
                                 class="w-full rounded-lg btn disabled"
                                 :class="buttonClass"
-                                :disabled="
-                                    loadingRegistration ||
-                                    actionLoading === 'register' ||
-                                    isCurrentEventRegistered
-                                "
-                                @click="addRegistration"
+                                :disabled="true"
                             >
-                                {{ buttonLabel }}
+                                Waitlisted
+                            </button>
+                            <button
+                                class="w-full rounded-lg btn btn-error btn-outline py-2"
+                                :disabled="loadingRegistration || actionLoading === 'delete'"
+                                @click="deleteRegistration"
+                            >
+                                {{ actionLoading === 'delete' ? 'Removing from waitlist...' : 'Leave Waitlist' }}
                             </button>
                         </div>
                         <div class="flex flex-col w-full gap-2" v-else>

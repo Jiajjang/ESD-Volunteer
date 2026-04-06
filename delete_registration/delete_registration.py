@@ -549,6 +549,48 @@ def health():
 # def health():
 #     return jsonify({"status": "ok"}), 200
 
+@app.route("/cancel-waitlist", methods=["POST"])
+def cancel_waitlist():
+    data         = request.get_json()
+    volunteer_id = data.get("volunteer_id")
+    event_id     = data.get("event_id")
+    registration_id = data.get("registration_id")
+
+    if not volunteer_id or not event_id or not registration_id:
+        return jsonify({"code": 400, "message": "volunteer_id, event_id, registration_id required"}), 400
+
+    # ── Remove from waitlist ──────────────────────────────────────
+    wl_resp = requests.delete(f"{WAITLIST_URL}/waitlist/{event_id}/{volunteer_id}")
+    if wl_resp.status_code not in (200, 404):  # 404 is ok, might already be removed
+        return jsonify({"code": 500, "message": "Failed to remove from waitlist"}), 500
+
+    # ── Cancel registration record ────────────────────────────────
+    cancel_resp = requests.put(
+        f"{REGISTRATION_URL}/registration/status",
+        json={"volunteer_id": volunteer_id, "event_id": event_id, "status": "cancelled"}
+    )
+    if cancel_resp.status_code != 200:
+        return jsonify({"code": 500, "message": "Failed to cancel registration"}), 500
+
+    event_details  = get_event_details(event_id)
+    cancelled_data = cancel_resp.json().get("data", {})
+    email          = cancelled_data.get("email", "")
+
+    publish_message("registration.cancelled", {
+        "event_id":   event_id,
+        "event_name": event_details["event_name"],
+        "start_date": event_details["start_date"],
+        "end_date":   event_details["end_date"],
+        "location":   event_details["location"],
+        "status":     "cancelled",
+        "email":      email,
+    })
+
+    return jsonify({
+        "code": 200,
+        "message": "Successfully removed from waitlist",
+        "data": cancelled_data
+    }), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5011, debug=True)

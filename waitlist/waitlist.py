@@ -291,6 +291,25 @@ def start_amqp_consumer():
             logger.error(f'[AMQP] Consumer error, retrying in 5s: {e}')
             import time; time.sleep(5)
 
+@app.route('/waitlist/<int:event_id>/<int:volunteer_id>', methods=['DELETE'])
+def remove_from_waitlist(event_id, volunteer_id):
+    existing = supabase.table('waitlist') \
+        .select('*') \
+        .eq('event_id', event_id) \
+        .eq('volunteer_id', volunteer_id) \
+        .execute()
+
+    if not existing.data:
+        return jsonify({'code': 404, 'message': 'Volunteer not in waitlist'}), 404
+
+    supabase.table('waitlist') \
+        .delete() \
+        .eq('event_id', event_id) \
+        .eq('volunteer_id', volunteer_id) \
+        .execute()
+
+    logger.info(f'[Waitlist] Removed volunteer_id={volunteer_id} from waitlist for event_id={event_id}')
+    return jsonify({'code': 200, 'message': 'Removed from waitlist successfully'}), 200
 
 if __name__ == '__main__':
     threading.Thread(target=start_amqp_consumer, daemon=True).start()
