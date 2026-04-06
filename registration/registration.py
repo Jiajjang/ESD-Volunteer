@@ -218,9 +218,26 @@ def add_registration():
     """
 
     data = request.get_json()
-    existing = getData({"volunteer_id": data["volunteer_id"], "event_id": data["event_id"]})
-    if existing and existing[0]["status"] in ["confirmed", "waitlisted"]:
-        return jsonify({"code": 400, "message": "User already registered"}), 400
+    # existing = getData({"volunteer_id": data["volunteer_id"], "event_id": data["event_id"]})
+    # if existing and existing[0]["status"] in ["confirmed", "waitlisted"]:
+    #     return jsonify({"code": 400, "message": "User already registered"}), 400
+    
+    existing = getData({
+        "volunteer_id": data["volunteer_id"],
+        "event_id": data["event_id"]
+    })
+
+    # 🔥 block ANY active registration (not just first record)
+    if existing:
+        active = [
+            r for r in existing
+            if r["status"] in ["confirmed", "pending", "waitlisted"]
+        ]
+        if active:
+            return jsonify({
+                "code": 400,
+                "message": "User already has an active registration"
+            }), 400
 
     registration = {
         "volunteer_id": data["volunteer_id"],
@@ -320,66 +337,58 @@ def update_registration():
 # ─── PUT /registration/status (used by composite) ───
 @app.route("/registration/status", methods=["PUT"])
 def update_registration_status():
-    """Update registration status
-    ---
-    tags:
-      - Registration
-    parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          required:
-            - volunteer_id
-            - event_id
-            - status
-          properties:
-            volunteer_id:
-              type: integer
-              example: 1
-            event_id:
-              type: integer
-              example: 3
-            status:
-              type: string
-              enum: [confirmed, pending, cancelled, rejected]
-              example: pending
-            expires_at:
-              type: string
-              example: "2026-04-05 12:00:00"
-    responses:
-      200:
-        description: Status updated
-      400:
-        description: Missing fields or user not found
-    """
-    
+
     data = request.get_json()
     volunteer_id = data.get("volunteer_id")
     event_id = data.get("event_id")
     status = data.get("status")
-    expires_at = data.get("expires_at") #felicia
+    expires_at = data.get("expires_at")
 
     if not all([volunteer_id, event_id, status]):
-        return jsonify({"code": 400, "message": "volunteer_id, event_id, and status are required"}), 400
+        return jsonify({
+            "code": 400,
+            "message": "volunteer_id, event_id, and status are required"
+        }), 400
 
-    updated = supabase.table("registration")\
-        .update({ #felicia
-                "status": status,
-                "expires_at": expires_at if status == "pending" else None
-            })\
-        .eq("volunteer_id", volunteer_id)\
-        .eq("event_id", event_id)\
+    # Get latest registration
+    latest = supabase.table("registration") \
+        .select("*") \
+        .eq("volunteer_id", volunteer_id) \
+        .eq("event_id", event_id) \
+        .order("registered_at", desc=True) \
+        .limit(1) \
         .execute()
 
-    if updated.data:
-        return jsonify({
-            "code": 200,
-            "message": "User status updated successfully",
-            "data": format_registration(updated.data[0])
-        })
-    return jsonify({"code": 400, "message": "User not found"}), 400
+    if not latest.data:
+        return jsonify({"code": 400, "message": "User not found"}), 400
+
+    latest_id = latest.data[0]["registration_id"]
+
+    # Update ONLY latest record
+    updated = supabase.table("registration") \
+        .update({
+            "status": status,
+            "expires_at": expires_at if status == "pending" else None
+        }) \
+        .eq("registration_id", latest_id) \
+        .execute()
+
+    # Cancel all other records
+    supabase.table("registration") \
+        .update({
+            "status": "cancelled",
+            "expires_at": None
+        }) \
+        .eq("volunteer_id", volunteer_id) \
+        .eq("event_id", event_id) \
+        .neq("registration_id", latest_id) \
+        .execute()
+
+    return jsonify({
+        "code": 200,
+        "message": "Latest registration updated successfully",
+        "data": format_registration(updated.data[0])
+    }), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

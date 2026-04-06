@@ -110,6 +110,8 @@ services:
     ports:
       - "5011:5011"
     environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
       - REGISTRATION_URL=http://registration:5000
       - EVENT_URL=http://event:5001
       - VOLUNTEER_URL=http://volunteer:5002
