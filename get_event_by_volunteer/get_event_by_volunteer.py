@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # ── Atomic service URLs ──────────────────────────────────────────
 REGISTRATION_URL = os.getenv("REGISTRATION_URL",  "http://registration:5000")
 EVENT_URL        = os.getenv("EVENT_URL",         "http://event:5001")
-VOLUNTEER_URL    = os.getenv("VOLUNTEER_URL",     "http://volunteer:5002")
+# VOLUNTEER_URL    = os.getenv("VOLUNTEER_URL",     "http://volunteer:5002")
 # WAITLIST_URL     = os.getenv("WAITLIST_URL",      "http://waitlist:5003")
 
 
