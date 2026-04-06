@@ -21,6 +21,10 @@ export default {
             successMessage: '',
             alertClass: 'alert-success',
             deleteReason: '',
+            promotionLoading: false,
+            promotionAction: null,
+            promotionError: null,
+            promotionSuccess: '',
         }
     },
 
@@ -42,16 +46,19 @@ export default {
                 )
                 return isMatch
             })
-
-            console.log('Final match:', match)
             return match || null
         },
-        eventStatus() {
-            return (
+
+        registrationState() {
+            const status =
                 this.currentRegistration?.registration_status?.trim().toLowerCase() ||
                 this.currentRegistration?.status?.trim().toLowerCase() ||
                 ''
-            )
+            return status || null
+        },
+
+        currentRegistrationId() {
+            return this.currentRegistration?.registration_id || null
         },
 
         volunteer_id() {
@@ -76,35 +83,31 @@ export default {
             return this.currentRole === 'organiser'
         },
 
+        formattedStatus() {
+            if (!this.registrationState) return ''
+            return this.registrationState.charAt(0).toUpperCase() + this.registrationState.slice(1)
+        },
+
         statusBadgeClass() {
-            if (this.eventStatus === 'confirmed') return 'badge badge-success'
-            if (this.eventStatus === 'pending') return 'badge badge-warning'
-            if (this.eventStatus === 'waitlisted') return 'badge badge-error'
+            if (this.registrationState === 'confirmed') return 'badge badge-success'
+            if (this.registrationState === 'pending') return 'badge badge-warning'
+            if (this.registrationState === 'waitlisted') return 'badge badge-error'
             return 'badge badge-neutral'
         },
 
-        formattedStatus() {
-            if (!this.eventStatus) return ''
-            return this.eventStatus.charAt(0).toUpperCase() + this.eventStatus.slice(1)
-        },
-
         isCurrentEventRegistered() {
-            return (
-                this.eventStatus === 'pending' ||
-                this.eventStatus === 'confirmed' ||
-                this.eventStatus === 'waitlisted'
-            )
+            return !!this.registrationState // Truthy = registered
         },
 
         buttonLabel() {
             if (this.actionLoading === 'register') return 'Registering...'
-            if (this.isCurrentEventRegistered) return 'Registered'
+            if (this.registrationState) return 'Registered'
             return 'Register'
         },
 
         buttonClass() {
             if (this.actionLoading === 'register') return 'btn-primary'
-            if (this.isCurrentEventRegistered) return 'btn-success'
+            if (this.registrationState) return 'btn-success'
             return 'btn-primary'
         },
 
@@ -222,7 +225,6 @@ export default {
         },
         // ----------------VOLUNTEER CANCEL REGISTRATION
         async deleteRegistration() {
-            console.log(this.currentRegistrationId)
             if (!this.isCurrentEventRegistered || !this.currentEventId) return
 
             this.actionLoading = 'delete'
@@ -338,53 +340,44 @@ export default {
         },
         // --------------- Waitlist
         async respondToPromotion(volunteerId, eventId, status) {
-            // Validate inputs (matches backend schema)
-            if (!volunteerId || !eventId || !['confirmed', 'rejected'].includes(status)) {
-                throw new Error(
-                    'Invalid volunteer_id, event_id, or status. Status must be "confirmed" or "rejected"',
-                )
-            }
+    if (!volunteerId || !eventId || !['confirmed', 'rejected'].includes(status)) {
+        this.error = 'Invalid promotion parameters'
+        return
+    }
 
-            const requestOptions = {
+    try {
+        this.actionLoading = `promotion-${status}`
+        const response = await fetch(
+            `http://localhost:8000/cancel-registration/respond`,
+            {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    volunteer_id: volunteerId,
-                    event_id: eventId,
-                    status: status,
-                }),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ volunteer_id: volunteerId, event_id: eventId, status }),
             }
+        )
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.message || 'Failed to respond')
 
-            try {
-                const response = await fetch(
-                    `http://localhost:8000/cancel-registration/respond`,
-                    requestOptions,
-                )
+        // Update local registration state
+        const reg = this.registeredEvents.find(r => r.volunteer_id === volunteerId)
+        if (reg) reg.registration_status = status
 
-                const contentType = response.headers.get('content-type') || ''
-                const isJson = contentType.includes('application/json')
-                const data = isJson ? await response.json() : await response.text()
+        // Show success message
+        this.successMessage = `Volunteer ${status === 'confirmed' ? 'accepted' : 'rejected'} successfully`
+        this.alertClass = status === 'confirmed' ? 'alert-success' : 'alert-error'
+        this.registrationSuccess = true
+        setTimeout(() => {
+            this.registrationSuccess = false
+            this.successMessage = ''
+        }, 3000)
 
-                if (!response.ok) {
-                    const error = (data && data.message) || data || response.statusText
-                    throw new Error(`Failed to respond: ${error}`)
-                }
-
-                return {
-                    success: true,
-                    message: data.message || 'Registration status updated',
-                    data,
-                }
-            } catch (error) {
-                console.error('Respond to promotion error:', error)
-                return {
-                    success: false,
-                    error: error.message || 'Network or server error',
-                }
-            }
-        },
+    } catch (err) {
+        console.error('Respond to promotion error:', err)
+        this.error = err.message || 'Network error'
+    } finally {
+        this.actionLoading = null
+    }
+}
     },
 
     async mounted() {
@@ -416,15 +409,20 @@ export default {
             <div class="card-body">
                 <div class="gap-2 flex flex-row justify-between items-center">
                     <h1 class="text-4xl font-black">{{ event.name }}</h1>
-
                     <div
                         v-if="
                             isVolunteerView &&
-                            (eventStatus === 'pending' ||
-                                eventStatus === 'confirmed' ||
-                                eventStatus === 'waitlisted')
+                            (registrationState === 'pending' ||
+                                registrationState === 'confirmed' ||
+                                registrationState === 'waitlisted')
                         "
-                        :class="statusBadgeClass"
+                        class="badge"
+                        :class="{
+                            'badge-success': registrationState === 'confirmed',
+                            'badge-warning': registrationState === 'pending',
+                            'badge-error': registrationState === 'waitlisted',
+                            'badge-neutral': !registrationState,
+                        }"
                     >
                         {{ formattedStatus }}
                     </div>
@@ -445,43 +443,62 @@ export default {
 
                     <!-- Volunteer actions -->
                     <template v-if="isVolunteerView">
-                        <button
-                            class="w-full rounded-lg btn"
-                            :class="buttonClass"
-                            :disabled="
-                                loadingRegistration ||
-                                actionLoading === 'register' ||
-                                isCurrentEventRegistered
-                            "
-                            @click="addRegistration"
+                        <div
+                            v-if="registrationState === 'pending'"
+                            class="flex flex-row gap-2 w-full"
                         >
-                            {{ buttonLabel }}
-                        </button>
-
-                        <button
-                            v-if="isCurrentEventRegistered && eventStatus !== 'waitlisted'"
-                            class="w-full rounded-lg btn btn-error btn-outline py-2"
-                            :disabled="loadingRegistration || actionLoading === 'delete'"
-                            @click="deleteRegistration"
-                        >
-                            {{ actionLoading === 'delete' ? 'Unregistering...' : 'Unregister' }}
-                        </button>
-                        <div v-if="eventStatus == 'pending'" class="flex flex-row gap-2">
                             <button
-                                class="btn btn-primary"
+                                class="btn btn-primary flex-1"
+                                :disabled="promotionLoading"
                                 @click="
                                     respondToPromotion(volunteer_id, currentEventId, 'confirmed')
                                 "
                             >
-                                Accept Registration
+                                {{
+                                    promotionLoading && promotionAction === 'confirmed'
+                                        ? 'Accepting...'
+                                        : 'Accept Registration'
+                                }}
                             </button>
+
                             <button
-                                class="btn btn-outline btn-accent"
+                                class="btn btn-outline btn-accent flex-1"
+                                :disabled="promotionLoading"
                                 @click="
                                     respondToPromotion(volunteer_id, currentEventId, 'rejected')
                                 "
                             >
-                                Reject Registration
+                                {{
+                                    promotionLoading && promotionAction === 'rejected'
+                                        ? 'Rejecting...'
+                                        : 'Reject Registration'
+                                }}
+                            </button>
+                        </div>
+                        <div
+                            class="flex flex-col w-full gap-2"
+                            v-else-if="
+                                isCurrentEventRegistered && registrationState === 'confirmed'
+                            "
+                        >
+                            <button
+                                class="w-full rounded-lg btn"
+                                :class="buttonClass"
+                                :disabled="
+                                    loadingRegistration ||
+                                    actionLoading === 'register' ||
+                                    isCurrentEventRegistered
+                                "
+                                @click="addRegistration"
+                            >
+                                {{ buttonLabel }}
+                            </button>
+                            <button
+                                class="w-full rounded-lg btn btn-error btn-outline py-2"
+                                :disabled="loadingRegistration || actionLoading === 'delete'"
+                                @click="deleteRegistration"
+                            >
+                                {{ actionLoading === 'delete' ? 'Unregistering...' : 'Unregister' }}
                             </button>
                         </div>
                     </template>
