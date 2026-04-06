@@ -70,7 +70,7 @@ def get_event_by_volunteer(volunteer_id):
         if not event_id:
             continue
 
-        if status == "cancelled":
+        if status in ("cancelled", "rejected"):
             continue
 
         events_resp = requests.get(f"{EVENT_URL}/event/{event_id}")

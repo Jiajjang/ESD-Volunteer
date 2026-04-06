@@ -340,9 +340,9 @@ def update_registration_status():
 
     data = request.get_json()
     volunteer_id = data.get("volunteer_id")
-    event_id = data.get("event_id")
-    status = data.get("status")
-    expires_at = data.get("expires_at")
+    event_id     = data.get("event_id")
+    status       = data.get("status")
+    expires_at   = data.get("expires_at")
 
     if not all([volunteer_id, event_id, status]):
         return jsonify({
@@ -350,12 +350,12 @@ def update_registration_status():
             "message": "volunteer_id, event_id, and status are required"
         }), 400
 
-    # Get latest registration
+    # Get latest registration by registration_id
     latest = supabase.table("registration") \
         .select("*") \
         .eq("volunteer_id", volunteer_id) \
         .eq("event_id", event_id) \
-        .order("registered_at", desc=True) \
+        .order("registration_id", desc=True) \
         .limit(1) \
         .execute()
 
@@ -367,16 +367,16 @@ def update_registration_status():
     # Update ONLY latest record
     updated = supabase.table("registration") \
         .update({
-            "status": status,
+            "status":     status,
             "expires_at": expires_at if status == "pending" else None
         }) \
         .eq("registration_id", latest_id) \
         .execute()
 
-    # Cancel all other records
+    # Cancel all other records for same volunteer + event
     supabase.table("registration") \
         .update({
-            "status": "cancelled",
+            "status":     "cancelled",
             "expires_at": None
         }) \
         .eq("volunteer_id", volunteer_id) \

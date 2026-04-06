@@ -160,7 +160,7 @@ export default {
                     const status = (reg.registration_status || reg.status || '')
                         .trim()
                         .toLowerCase()
-                    return status !== 'cancelled'
+                    return status !== 'cancelled' || status !== 'rejected'
                 })
 
                 console.log('currentEventId:', this.currentEventId)
