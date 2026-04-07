@@ -318,7 +318,7 @@ def add_registration():
         "event_id":     data["event_id"],
         "status":       data.get("status", "confirmed"),  # ← use what composite sends
         "registered_at": datetime.now(sg_tz).strftime('%Y-%m-%d %H:%M:%S'),
-        "expires_at":   data.get("expires_at") if data.get("status") == "pending" else None #felicia
+        "expires_at":   data.get("expires_at") if data.get("status") == "pending" else None
     }
 
     result = supabase.table("registration").insert(registration).execute()
